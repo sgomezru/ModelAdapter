@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/pytorch:23.07-py3
+FROM nvcr.io/nvidia/pytorch:24.03-py3
 
 # ARG user
 # ARG uid
@@ -85,4 +85,4 @@ EXPOSE 6006
 # IPython https://github.com/tensorflow/tensorflow/blob/master/tensorflow/tools/docker/Dockerfile.gpu
 EXPOSE 8889
 ### - start interactive console on attach
-ENV DEBIAN_FRONTEND teletype
+ENV DEBIAN_FRONTEND teletype 
