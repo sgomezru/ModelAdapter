@@ -182,47 +182,6 @@ class UnetSurfaceDice(nn.Module):
         self.dice(unet_out, target)
     
     
-# class CalgaryCriterionVAE(nn.Module):
-#     def __init__(self, diff=True, loss='huber'):
-#         super().__init__()
-#         #self.bce   = nn.BCELoss()
-#         self.diff  = diff
-#         #self.mse   = nn.MSELoss()
-#         #self.loss  = nn.HuberLoss()
-        
-#         self.id_loss = loss
-#         if loss == 'huber':
-#             self.loss = nn.HuberLoss()
-#         elif loss == 'bce':
-#             self.loss = nn.BCEWithLogitsLoss()
-        
-#     def forward(self, unet_out, samples, train_data, beta):
-        
-#         #preds = torch.sigmoid(samples)
-#         #with torch.no_grad():
-#         #    target = torch.sigmoid(unet_out.detach())    
-#         #loss = self.bce(preds, target)
-        
-        
-#         loss = self.loss(samples, unet_out)
-#         metrics = {'output_mse': loss.item()}
-#         if not self.diff:
-#             loss *= 0
-        
-#         for layer in train_data:
-#             metrics[layer] = {}
-            
-#             mse = train_data[layer]['mse']
-#             kl  = train_data[layer]['kl']
-#             loss += mse + beta[layer] * kl
-            
-#             metrics[layer]['mse'] = mse.item()
-#             metrics[layer]['kl']  = kl.item()
-#             metrics[layer]['mu']  = train_data[layer]['mu'].detach().mean().item()
-#             metrics[layer]['var'] = torch.exp(train_data[layer]['log_var']).detach().mean().item()
-            
-#         return loss, metrics
-    
     
 class CalgaryCriterionAE(nn.Module):
     def __init__(self, recon=True, diff=True, loss='huber'):
@@ -371,6 +330,3 @@ class RefineCriterion(nn.Module):
             metrics[layer]['var'] = torch.exp(train_data[layer]['log_var']).detach().mean().item()
             
         return loss, metrics
-    
-    
-    

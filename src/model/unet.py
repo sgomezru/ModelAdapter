@@ -676,23 +676,3 @@ class SkipConnection(nn.Module):
             return torch.mul(x, y)
         raise NotImplementedError(f"Unsupported mode {self.mode}.")
     
-
-
-        
-# class UNetEnsemble(nn.Module):
-#     def __init__(
-#         self,
-#         unets: List,
-#         reduce: str
-#     ):
-#         super().__init__()
-#         self.reduce=reduce
-#         self.ensemble = nn.ModuleList(unets)
-
-#     def forward(self, x):
-#         x_out = torch.stack([module(x.clone()) for module in self.ensemble], dim=0)
-#         if self.reduce=='none':
-#             return x_out
-#         elif self.reduce=='mean':
-#             print(x_out.shape)
-#             return x_out.mean(0)
