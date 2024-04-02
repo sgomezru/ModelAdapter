@@ -10,15 +10,17 @@ This script runs the Docker image given by name.
 Options:
   -h, --help      Display this help message and exit
   -t <name>       Process the name provided with the -t option
+  -cpus <number>  Number of cpus to use
 
 Example:
-  $0 -t projectA  Runs an image with name projectA
+  $0 -t projectA -cpus 16  Runs an image with name projectA and 16 cpu cores
 
 EOF
 )
 
 # Initialize our variables
 name=""
+cpus=""
 
 while getopts ":ht:" opt; do
   case ${opt} in
@@ -28,6 +30,9 @@ while getopts ":ht:" opt; do
       ;;
     t )
       name="$OPTARG"
+      ;;
+    cpus )
+      cpus="$OPTARG"
       ;;
     \? )
       echo "Invalid Option: -$OPTARG" 1>&2
@@ -51,8 +56,9 @@ docker run \
 	-it \
 	--net=host \
 	--runtime=nvidia \
-    --gpus all \
-    --privileged \
+  --gpus all \
+  --cpus=$cpus \
+  --privileged \
 	--ipc=host \
 	--mount type=bind,source="/home/lennartz/data/conp-dataset",target=/data/conp-dataset \
 	--mount type=bind,source="/home/lennartz/data/nnUNet_preprocessed",target=/data/nnUNet_preprocessed \
