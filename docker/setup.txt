@@ -1,0 +1,86 @@
+### Working with Docker ###
+
+
+1 - There is no image
+
+# decide where docker lives in your home dir
+
+## make a folder to manage docker projects
+mkdir -p docker-projects/layervis
+## move everything from docker/ to your project folder
+cp path/to/repo/docker/* docker-projects/layervis/
+
+# handle external data
+
+## within your project, decide where to store stuff thats on the machine
+## and later needed in the container (e.g. data, some scripts or w/e)
+mkdir docker-projects/layervis/out
+## update the run.sh so that it finds your data
+vim docker-projects/layervis/run.sh
+
+# build the image
+
+## it "should" run out of the box like this (you can choose a name freely):
+bash build.sh -t layervis
+## this step creates an image and only needs to be done once unless you change
+## the Dockerfile. Then re-build.
+## You can find your image in:
+docker image list
+
+
+2 - There is an image but no container
+
+# run a container from the image your created - check carefully, you have to rebuild the container if you mess this up
+
+## make sure you set file paths in run.sh. This links your system data to your docker
+## Set cpus according to the number of GPUs you plan on using to avoid CPU bottlenecks
+## i.e. for auerkamp and one GPU you get n_cpus = 56/4 = 14
+## then execute:
+bash run.sh -t layervis -cpus 14
+## if things work, you should see your container running by checking:
+docker ps
+
+
+3 - There is a container but its not running
+
+## Check its name/ID with
+docker ps -a
+## restart it using 
+docker start Name
+
+
+4 - There is a running container
+
+## Check its ID or name with
+docker ps -a
+## Then attach to it via command line with 
+docker attach ID/name
+## and you should see a console within docker.
+
+
+5 - Working with the container
+
+# working with it via VSCode (or any other ID that supports container) (recommended)
+
+## get DevContainer extension
+## ssh into host machine via Connect to Host (F1)
+## Attach to running container via DevContainer: Attach to running container (F1)
+
+# working with it via command line
+
+## attach to it and you get a console
+docker attach ID/name
+
+
+
+n - Additional Info
+
+## if ssh complains, setup ssh eval
+eval `ssh-agent -s` (mind the angled paranthesis)
+## setup github account within docker
+git config --global user.email "email"  (with paranthesis, without this tip)
+git config --global user.name "git user name"
+##setup vscode
+..
+## if you kill the container, all data is lost except for whats in out/. Make sure
+## to maintain your git
