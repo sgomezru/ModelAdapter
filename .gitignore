@@ -1,4 +1,42 @@
-# Byte-compiled / optimized / DLL files
+### - local folders
+
+# Swap files
+*.swp
+
+# accidental data files
+*.csv
+*.json
+*.pkl
+*.pt
+*.npy
+
+# data sets
+data
+
+# models and results
+pre-trained
+results
+
+# temporary results / experiments
+pre-trained-tmp
+results-tmp
+helper-tmp
+
+# local files (e.g. for fiftyone)
+src/notebooks/tmp
+src/notebooks/danger/tmp
+src/notebooks/venus
+src/notebooks/epinet-recover
+
+# everything related to Weights&Biases
+**/wandb/*
+
+# log files related to Hydra
+**/outputs/*
+
+### - standard python gitignore provided by github
+
+# Bte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -150,11 +188,4 @@ dmypy.json
 .pytype/
 
 # Cython debug symbols
-cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+cython_debug/y

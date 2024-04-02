@@ -14,7 +14,7 @@ ENV PATH="${PATH}:/opt/hpcx/ompi/bin"
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/opt/hpcx/ompi/lib"
 
 ### update
-RUN apt-get update && upgrade
+RUN apt-get -y update && apt-get -y upgrade
 
 ### OPENGL
 # RUN apt-get update && apt-get install -y \
@@ -62,14 +62,17 @@ RUN pip install \
 ## setup
 # move nvidia-stuff to separate folder
 WORKDIR /workspace
-RUN mv * nvidia | mkdir nvidia
+RUN rm -r *
+## Project Repo
+WORKDIR /workspace/repositories
+RUN git clone https://github.com/MedVisBonn/LayerVis.git
 ## surface distances
-WORKDIR /workspace/repos
+WORKDIR /workspace/repositories
 RUN git clone https://github.com/deepmind/surface-distance.git
 RUN pip install surface-distance/
 ## nnUNet
 RUN git clone --branch nnunetv1 https://github.com/MIC-DKFZ/nnUNet.git
-WORKDIR /workspace/repos/nnUNet
+WORKDIR /workspace/repositories/nnUNet
 RUN pip install -e .
 # remove annoying print statements from init
 RUN sed -i '2,6d' nnunet/__init__.py
