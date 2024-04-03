@@ -30,7 +30,7 @@ docker image list
 
 2 - There is an image but no container
 
-# run a container from the image your created - check carefully, you have to rebuild the container if you mess this up
+# run a container from the image you created - check carefully, you have to rebuild the container if you mess this up
 
 ## make sure you set file paths in run.sh. This links your system data to your docker
 ## Set cpus according to the number of GPUs you plan on using to avoid CPU bottlenecks
@@ -51,15 +51,6 @@ docker start Name
 
 4 - There is a running container
 
-## Check its ID or name with
-docker ps -a
-## Then attach to it via command line with 
-docker attach ID/name
-## and you should see a console within docker.
-
-
-5 - Working with the container
-
 # working with it via VSCode (or any other ID that supports container) (recommended)
 
 ## get DevContainer extension
@@ -70,7 +61,6 @@ docker attach ID/name
 
 ## attach to it and you get a console
 docker attach ID/name
-
 
 
 n - Additional Info
