@@ -706,10 +706,38 @@ def get_eval_data(
             test_sets=test_sets,
             cfg=cfg
         )
-
+    elif cfg.run.data_key == 'prostate':
+        data = get_pmri_eval_data(
+            train_set=train_set,
+            val_set=val_set,
+            test_sets=test_sets,
+            cfg=cfg
+        )
     return data
 
-
+def get_pmri_eval_data(
+        train_set: bool,
+        val_set: bool,
+        cfg: OmegaConf,
+):
+    datapath = cfg.fs.root + cfg.data.prostate.pmri.data_path
+    data = {}
+    if train_set:
+        data['train'] = MultisiteMRIProstateDataset(
+            datapath=datapath,
+            vendor=cfg.unet.training.vendor,
+            split='train',
+            load_only_present=cfg.unet.trainig.load_only_present
+        )
+    if val_set:
+        data['val'] = MultisiteMRIProstateDataset(
+            datapath=datapath,
+            vendor=cfg.unet.training.vendor,
+            split='test',
+            load_only_present=cfg.unet.trainig.load_only_present
+        )
+    assert len(data) > 0, "No data sets selected."
+    return data
 
 def get_brain_eval_data(
     cfg: OmegaConf,

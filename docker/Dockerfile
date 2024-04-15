@@ -84,6 +84,10 @@ RUN mkdir -p /data/nnUNet_preprocessed
 ENV nnUNet_preprocessed="/data/nnUNet_preprocessed"
 RUN mkdir -p /results/nnUNet_results
 ENV RESULTS_FOLDER="/results/nnUNet_results"
+RUN mkdir -p /data/Data
+ENV MOUNT_DATA_PATH="/data/Data"
+RUN mkdir -p /src/DSSQ
+ENV MOUNT_SRC_PATH="/src/DSSQ"
 
 ### - CLEANUP
 RUN apt-get autoremove -y && rm -rf /tmp/* /var/tmp/* && apt-get clean && rm -rf /var/lib/apt/lists/*

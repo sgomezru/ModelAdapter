@@ -16,6 +16,9 @@ data:
         mnm:
             data_path: 'data/nnUNet_preprocessed/Task679_MNM/'
             selection: 'all_cases'
+    prostate:
+        pmri:
+            data_path: 'data/Data/PMRI/'
 unet:
     weight_dir: '../../pre-trained/trained_UNets/'
     log_dir: '../../pre-trained/trainer_logs/'
@@ -46,4 +49,17 @@ unet:
             num_val_batches_per_epoch: 50
             epochs: 250
             patience: 4
+            lr: 0.001
+    prostate:
+        pre: 'pmri_unet'
+        n_chans_in: 1
+        n_filters_init: 8
+        n_chans_out: 2
+        training:
+            vendor: 'siemens'
+            load_only_present: True
+            augment: True
+            validation: True
+            batch_size: 32
+            epochs: 250
             lr: 0.001
