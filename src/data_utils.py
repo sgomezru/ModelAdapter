@@ -56,10 +56,14 @@ from batchgenerators.dataloading.single_threaded_augmenter import SingleThreaded
 from batchgenerators.dataloading.multi_threaded_augmenter import MultiThreadedAugmenter
 from batchgenerators.dataloading.multi_threaded_augmenter import producer, results_loop
 
-
-
-
-
+from monai.data import Dataset as mDataset
+from monai.transforms import (
+    CastToTyped,
+    EnsureTyped,
+    RandFlipd,
+    ToTensord
+)
+from monai.transforms import Compose as mCompose
 
 from dataset import *
 
@@ -311,6 +315,18 @@ class Transforms(object):
                 p_per_channel=1
             ),
         ]
+
+        monai_io_transforms = [
+            ToTensord(keys=['input', 'target']),
+        ]
+        monai_spatial_transforms = [
+            RandFlipd(keys=['input', 'target'], spatial_axis=[0], prob=0.5),
+            RandFlipd(keys=['input', 'target'], spatial_axis=[1], prob=0.5),
+        ]
+        monai_type_transforms = [
+            CastToTyped(keys=['input', 'target'], dtype=(np.float32, torch.long)),
+            EnsureTyped(keys=['input', 'target'])
+        ]
         
         self.transforms = {
             'io_transforms': io_transforms,
@@ -319,8 +335,10 @@ class Transforms(object):
             'local_transforms': global_nonspatial_transforms + local_transforms + io_transforms,
             'local_val_transforms': local_transforms + io_transforms,
             'all_transforms': local_transforms + global_transforms + io_transforms,
+            'monai_base_transforms': monai_io_transforms + monai_type_transforms,
+            'monai_spatial_transforms': monai_spatial_transforms,
+            'monai_all_transforms': monai_io_transforms + monai_spatial_transforms + monai_type_transforms
         }
-
 
     def get_transforms(
         self, 
@@ -725,16 +743,16 @@ def get_pmri_eval_data(
     if train_set:
         data['train'] = MultisiteMRIProstateDataset(
             datapath=datapath,
-            vendor=cfg.unet.training.vendor,
+            vendor=cfg.unet.prostate.training.vendor,
             split='train',
-            load_only_present=cfg.unet.trainig.load_only_present
+            load_only_present=cfg.unet.prostate.training.load_only_present
         )
     if val_set:
         data['val'] = MultisiteMRIProstateDataset(
             datapath=datapath,
-            vendor=cfg.unet.training.vendor,
+            vendor=cfg.unet.prostate.training.vendor,
             split='test',
-            load_only_present=cfg.unet.trainig.load_only_present
+            load_only_present=cfg.unet.prostate.training.load_only_present
         )
     assert len(data) > 0, "No data sets selected."
     return data
@@ -1255,4 +1273,47 @@ def get_heart_train_loader(
     #     # seeds=None
     # )
     
+    return train_gen, valid_gen
+
+def get_pmri_data_loaders(cfg: OmegaConf):
+    data = get_pmri_eval_data(train_set=True, val_set=True, cfg=cfg)
+    train_transform_key = 'monai_all_transforms'
+    val_transform_key = 'monai_base_transforms'
+    transforms = Transforms()
+    # transforms = mCompose(
+        # ToTensord(keys=['input', 'target']),
+        # RandFlipd(keys=['input', 'target'], spatial_axis=[0], prob=0.5),
+        # RandFlipd(keys=['input', 'target'], spatial_axis=[1], prob=0.5),
+        # CastToTyped(keys=['input', 'target'], dtype=(np.float32, torch.long)),
+        # EnsureTyped(keys=['input', 'target'])
+    # )
+    train_dataset = mDataset(data['train'])
+    model_cfg = cfg.unet.prostate
+    val_dataset = mDataset(data['val'])
+    train_loader = MultiImageSingleViewDataLoader(
+        data=train_dataset,
+        batch_size=model_cfg.training.batch_size,
+        return_orig=False
+    )    
+    val_loader = MultiImageSingleViewDataLoader(
+        data=val_dataset,
+        batch_size=model_cfg.training.batch_size,
+        return_orig=False
+    )
+    train_augmentor = transforms.get_transforms(train_transform_key)
+    valid_augmentor = transforms.get_transforms(val_transform_key)
+    train_gen = MultiThreadedAugmenter(
+        data_loader = train_loader,
+        transform = train_augmentor,
+        num_processes = 4,
+        num_cached_per_queue = 2,
+        seeds=None
+    )
+    valid_gen = MultiThreadedAugmenter(
+        data_loader = val_loader, 
+        transform = valid_augmentor, 
+        num_processes = 4, 
+        num_cached_per_queue = 2, 
+        seeds=None
+    )
     return train_gen, valid_gen

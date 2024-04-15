@@ -14,7 +14,6 @@ import matplotlib.pyplot as plt
 import wandb
 from tqdm.auto import tqdm
 import numpy as np
-from dataset import CalgaryCampinasDataset
 from utils import (
     EarlyStopping, 
     epoch_average, 
@@ -29,8 +28,6 @@ from losses import (
     CrossEntropyTargetArgmax,
     DiceScoreMMS
 )
-
-
 
 def get_unet_trainer(
     cfg, 
@@ -72,13 +69,55 @@ def get_unet_trainer(
             val_loader,
             model
         )
-
+    elif cfg.run.data_key == 'prostate':
+        trainer = get_unet_prostate_trainer(
+            cfg,
+            train_loader,
+            val_loader,
+            model
+        )
     else:
         raise NotImplementedError
         
     return trainer
 
+def get_unet_prostate_trainer(
+        cfg,
+        train_loader,
+        val_loader,
+        model
+):
+    '''
+    Trainer for Multisite PMRI dataset
+    '''
+    model_cfg = cfg.unet[cfg.run.data_key]
+    num_batches_per_epoch = model_cfg.training.num_batches_per_epoch
+    num_val_batches_per_epoch = model_cfg.training.num_val_batches_per_epoch
+    description = f'{cfg.run.data_key}_{model_cfg.pre}_{cfg.run.iteration}'
+    weight_dir = cfg.unet.weight_dir,
+    log_dir = cfg.unet.log_dir, 
+    lr = model_cfg.training.lr
+    n_epochs = model_cfg.training.epochs
+    patience = model_cfg.training.patience
+    log = cfg.wandb.log
+    criterion = nn.CrossEntropyLoss()
 
+    return UNetTrainerPMRI(
+        model = model, 
+        criterion = criterion, 
+        train_loader = train_loader, 
+        val_loader = val_loader,
+        num_batches_per_epoch = num_batches_per_epoch,
+        num_val_batches_per_epoch = num_val_batches_per_epoch,
+        weight_dir = weight_dir,
+        log_dir = log_dir, 
+        lr = lr, 
+        n_epochs = n_epochs, 
+        patience = patience, 
+        es_mode = 'min', 
+        eval_metrics = None, 
+        log = log, 
+    )
 
 def get_unet_heart_trainer(
     cfg,
@@ -904,6 +943,300 @@ class UNetTrainerACDC():
 #                 else:
 #                     self.train_loader.dataset.augment = augment
                 
+            self.model.train()
+            train_loss = self.train_epoch()
+            self.model.eval()
+            valid_loss = self.eval_epoch()
+            self.scheduler.step(valid_loss)
+            
+            epoch_summary = [f"Epoch {epoch+1}"] + [f" - {key}: {self.history[key][-1]:.4f} |" for key in self.history] + [ f"ES epochs: {self.es.num_bad_epochs}"]
+            progress_bar.set_description("".join(epoch_summary))
+            es_metric = list(self.history.values())[1][-1]
+            
+            if self.log:
+                wandb.log({}, commit=True)            
+
+            if self.es_mode == 'min':
+                if es_metric < best_es_metric:
+                    best_es_metric = es_metric
+                    self.save_model()
+            else:
+                if es_metric > best_es_metric:
+                    best_es_metric = es_metric
+                    self.save_model()
+            if(self.es.step(es_metric)):
+                print('Early stopping triggered!')
+                break
+                
+        self.training_time = time.time() - self.training_time
+        self.save_hist()
+        self.load_model()
+
+class UNetTrainerPMRI():
+    """
+    Trainer class for training and evaluating a U-Net model for ACDC dataset.
+    """
+    def __init__(
+        self, 
+        model: nn.Module, 
+        criterion: Callable, 
+        train_loader: DataLoader,
+        val_loader: DataLoader,
+        num_batches_per_epoch,
+        num_val_batches_per_epoch,
+        weight_dir: str,
+        log_dir: str,
+        lr: float = 1e-4, 
+        n_epochs: int = 250, 
+        patience: int = 5, 
+        es_mode: str = 'min', 
+        eval_metrics: Dict[str, nn.Module] = None,
+        log: bool = True,
+        device = 0,
+    ):
+        self.device       = device
+        self.model        = model.to(self.device)
+        self.criterion    = criterion
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.num_batches_per_epoch = num_batches_per_epoch
+        self.num_val_batches_per_epoch = num_val_batches_per_epoch
+        self.weight_dir   = weight_dir
+        self.log_dir      = log_dir
+        self.lr           = lr
+        self.n_epochs     = n_epochs
+        self.patience     = patience
+        self.es_mode      = es_mode
+        self.eval_metrics = eval_metrics
+        self.log          = log
+        self.optimizer    = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        self.scheduler    = ReduceLROnPlateau(self.optimizer, 'min', patience=self.patience)
+        self.es           = EarlyStopping(mode=self.es_mode, patience=2*self.patience)
+        self.scaler       = GradScaler()
+        self.history      = {'train loss': [], 'valid loss' : []}
+        if self.eval_metrics is not None:
+            self.history = {**self.history, **{key: [] for key in self.eval_metrics.keys()}}
+            
+        if self.log:
+            wandb.watch(self.model)
+            
+        self.training_time = 0
+        
+    def inference_step(self, x):
+        return self.model(x.to(self.device))
+    
+    def save_hist(self):
+        if(not os.path.exists(self.log_dir)):
+            os.makedirs(self.log_dir)
+        savepath = f'{self.log_dir}{self.description}.npy'
+        np.save(savepath, self.history)
+        return
+    
+    def save_model(self):
+        if(not os.path.exists(self.weight_dir)):
+            os.makedirs(self.weight_dir)
+
+        savepath = f'{self.weight_dir}{self.description}_best.pt'
+        torch.save({
+        'model_state_dict': self.model.state_dict(),
+        'optimizer_state_dict': self.optimizer.state_dict(),
+        }, savepath)
+        self.save_hist()
+        return
+        
+    def load_model(self):
+        savepath = f'{self.self.weight_dir}{self.description}_best.pt'
+        print(savepath)
+        checkpoint = torch.load(savepath)
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        savepath = f'{self.weight_dir}{self.description}.npy'
+        self.history = np.load(savepath,allow_pickle='TRUE').item()
+        return
+    
+    def train_epoch(self):
+        loss_list, batch_sizes = [], []
+        for it in range(self.num_batches_per_epoch):
+            batch = next(self.train_loader)
+            input_ = batch['input'].float()
+            target = batch['target'].squeeze(1)
+            self.optimizer.zero_grad()
+            with autocast():
+                net_out = self.inference_step(input_)
+                loss = self.criterion(net_out, target.to(self.device))
+            #loss.backward()
+            self.scaler.scale(loss).backward()
+            self.scaler.unscale_(self.optimizer)
+            nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0, norm_type=2.0)
+            #self.optimizer.step()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            loss_list.append(loss.item())
+            batch_sizes.append(input_.shape[0])
+        average_loss = epoch_average(loss_list, batch_sizes)
+        self.history['train loss'].append(average_loss)
+        
+        if self.log:
+            wandb.log({
+                'train_loss': average_loss
+            }, commit=False)
+        
+        return average_loss
+    
+    def get_sample(self, mode: str = 'valid'):
+        if mode == 'valid':
+            self.model.eval()
+            data, target, _ = next(iter(self.val_loader)).values()
+            net_out = self.inference_step(data) 
+            self.model.train()
+        else:
+            data, target, _ = next(iter(self.train_loader)).values()
+            net_out = self.inference_step(data)
+        x_hat = net_out
+        
+        return data.cpu(), target.cpu(), x_hat.cpu()
+    
+    
+    @torch.no_grad()
+    def eval_epoch(self):
+        loss_list, batch_sizes = [], []
+        if self.eval_metrics is not None:
+            epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
+        for it in range(self.num_val_batches_per_epoch):
+            batch = next(self.val_loader)
+            input_ = batch['input'].float()
+            target = batch['target'].squeeze(1).to(self.device)
+            net_out = self.inference_step(input_)
+            loss_list.append(self.criterion(net_out, target).item())
+            batch_sizes.append(input_.shape[0])
+            if self.eval_metrics is not None:
+                for key, metric in self.eval_metrics.items():
+                    epoch_metrics[key].append(metric(net_out,target).detach().mean().cpu())
+        average_loss = epoch_average(loss_list, batch_sizes)
+        self.history['valid loss'].append(average_loss)
+        if self.eval_metrics is not None:
+            for key, epoch_scores in epoch_metrics.items():
+                avrg = epoch_average(epoch_scores, batch_sizes)
+                self.history[key].append(avrg)
+                if self.log:
+                    wandb.log({
+                        key: avrg
+                    }, commit=False)
+                    
+        if self.log:
+            wandb.log({
+                'valid_loss': average_loss,
+            }, commit=False)
+
+        return average_loss
+    
+    @torch.no_grad()
+    def test_set(self, testloader: DataLoader) -> dict:
+        self.model.eval()
+        
+        metric, batch_sizes = [], []
+        if self.eval_metrics is not None:
+            epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
+        for batch in testloader:
+            input_ = batch['input']
+            target = batch['target'].squeeze(1)
+            batch_sizes.append(input_.shape[0])
+            
+            input_chunks  = torch.split(input_, 32, dim=0)
+            target_chunks = torch.split(target, 32, dim=0)
+            net_out = []
+            for input_chunk, target_chunk in zip(input_chunks, target_chunks):
+                net_out_chunk = self.inference_step(input_chunk.to(self.device))
+                net_out.append(net_out_chunk.detach().cpu())
+                
+            net_out = torch.cat(net_out, dim=0)
+            if self.eval_metrics is not None:
+                for key, metric in self.eval_metrics.items():
+                    epoch_metrics[key].append(metric(net_out,target).detach().mean().cpu())
+                    
+        if self.eval_metrics is not None:
+            for key, epoch_scores in epoch_metrics.items():
+                epoch_metrics[key] = epoch_average(epoch_scores, batch_sizes)
+                
+        return epoch_metrics
+    
+    @torch.no_grad()
+    def eval_all(self, cfg) -> dict:
+        raise "NotImplementedError"
+    
+    @torch.no_grad()
+    def get_subset(self, dataloader: DataLoader, n_cases=10, part="tail") -> DataLoader:
+        assert dataloader.batch_size == 1
+        self.model.eval()
+        loss_list = []
+        for batch in dataloader:
+            input_  = batch['input'].to(self.device)
+            target  = batch['target'].squeeze(1).to(self.device)
+            net_out = self.inference_step(input_)
+            loss    = self.criterion(net_out, target)
+            loss_list.append(loss.item())
+            
+        loss_tensor = torch.tensor(loss_list)
+        indices = torch.argsort(loss_tensor, descending=True)
+        len_ = len(loss_list)
+        if part == 'tail':
+            indices = indices[:len_ // 10]
+        elif part == 'head':
+            indices = indices[-len_ // 10:]   
+            
+        indices_selection = slice_selection(dataloader.dataset, indices, n_cases=n_cases)
+        subset            = dataset_from_indices(dataloader.dataset, indices_selection)
+        
+        return subset
+    
+    def plot_history(self):
+        plt.style.use('seaborn')
+        fig, ax = plt.subplots(1,2)
+        fig.set_size_inches(12,8)
+        fig.suptitle(self.description, fontsize=15)
+        ax[0].plot(self.history['train loss'], label='train loss', c='lightcoral', lw=3)
+        ax[0].plot(self.history['valid loss'], label='valid loss', c='cornflowerblue', lw=3)
+        ax[0].set_xlabel("epoch")
+        ax[0].set_ylabel("loss")
+        ax[0].legend()
+        ax[0].set_title('Training and Validation Losses')
+        
+        if 'Volumetric Dice' in self.history:
+            # Add code here to plot the Volumetric Dice metric
+            pass
+            loss_array = np.array(self.history['Volumetric Dice'])
+            ax[1].plot(self.history['Volumetric Dice'], label='Volumetric Dice', c='teal', lw=3)
+            ax[1].set_xlabel("Epoch")
+            ax[1].set_ylabel("Volumetric Dice")
+            ax[1].legend(loc="lower right")
+            ax[1].set_title(f'Volumetric Dice of Validation Set\nBest Value: {loss_array.max()} @ Epoch {loss_array.argmax()+1}')
+        
+        
+        if 'Surface Dice' in self.history:
+            loss_array = np.array(self.history['Surface Dice'])
+            ax[1].plot(self.history['Surface Dice'], label='Surface Dice', c='tab:purple', lw=3)
+            ax[1].set_xlabel("Epoch")
+            ax[1].set_ylabel("Surface Dice")
+            ax[1].legend(loc="lower right")
+            ax[1].set_title(f'Surface Dice of Validation Set\nBest Value: {loss_array.max()} @ Epoch {loss_array.argmax()+1}')
+        #plt.show()
+        
+        #plt.savefig(f"{self.description}_logs.png")
+        
+        return fig
+    
+    
+    def fit(self):
+        best_es_metric = 1e25 if self.es_mode == 'min' else -1e25
+        progress_bar = tqdm(range(self.n_epochs), total=self.n_epochs, position=0, leave=True)
+        self.model.eval()
+        valid_loss = self.eval_epoch()
+        self.training_time = time.time()
+
+        if self.log:
+            wandb.log({}, commit=True)
+        
+        for epoch in progress_bar:
             self.model.train()
             train_loss = self.train_epoch()
             self.model.eval()

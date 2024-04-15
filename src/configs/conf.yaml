@@ -3,7 +3,7 @@
 debug: False
 wandb: 
     log: True
-    project: 'MICCAI2023-extension'
+    project: 'MyProj'
 fs: 
     repo_root: '../../'
     root: '../../../../../'
@@ -61,5 +61,8 @@ unet:
             augment: True
             validation: True
             batch_size: 32
-            epochs: 250
+            num_batches_per_epoch: 250
+            num_val_batches_per_epoch: 25 
+            epochs: 200
+            patience: 4
             lr: 0.001

@@ -124,8 +124,8 @@ class MultisiteMRIProstateDataset(Dataset):
 
     def __getitem__(self, idx):
         return {
-            "image": self.input[..., idx],
-            "label": self.target[..., idx]
+            "input": self.input[..., idx],
+            "target": self.target[..., idx]
         }
 
 class CalgaryCampinasDataset(Dataset):
