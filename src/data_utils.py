@@ -127,6 +127,9 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
         # get random subset from dataset of batch size length
         sample = torch.randint(0, len(self._data), size=(self.batch_size,))
         data   = self._data[sample]
+        print('**** MISVD *****')
+        print(data.keys())
+        print('**** MISVD *****')
         # split into input and target
         img    = data['input']
         tar    = data['target']
@@ -135,6 +138,9 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
         out = {'data': img.numpy().astype(np.float32), 
                'seg':  tar.numpy().astype(np.float32)}
         
+        print('**** MISVD *****')
+        print(out.keys())
+        print('**** MISVD *****')
         # if the original data is also needed, activate this flag to store it where augmentations
         # cant find it.
         if self.return_orig:
@@ -142,8 +148,6 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
             out['target_orig'] = tar
         
         return out
-    
-    
 
 class Transforms(object):
     """
@@ -317,17 +321,16 @@ class Transforms(object):
         ]
 
         monai_io_transforms = [
-            ToTensord(keys=['input', 'target']),
+            ToTensord(keys=['data', 'seg']),
         ]
         monai_spatial_transforms = [
-            RandFlipd(keys=['input', 'target'], spatial_axis=[0], prob=0.5),
-            RandFlipd(keys=['input', 'target'], spatial_axis=[1], prob=0.5),
+            RandFlipd(keys=['data', 'seg'], spatial_axis=[0], prob=0.5),
+            RandFlipd(keys=['data', 'seg'], spatial_axis=[1], prob=0.5),
         ]
         monai_type_transforms = [
-            CastToTyped(keys=['input', 'target'], dtype=(np.float32, torch.long)),
-            EnsureTyped(keys=['input', 'target'])
+            CastToTyped(keys=['data', 'seg'], dtype=(np.float32, torch.long)),
+            EnsureTyped(keys=['data', 'seg'])
         ]
-        
         self.transforms = {
             'io_transforms': io_transforms,
             'global_nonspatial_transforms': global_nonspatial_transforms + io_transforms,
