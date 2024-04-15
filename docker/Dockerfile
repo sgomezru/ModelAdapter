@@ -66,6 +66,9 @@ RUN rm -r *
 ## Project Repo
 WORKDIR /workspace/repositories
 RUN git clone https://github.com/MedVisBonn/LayerVis.git
+## Own forked repo
+WORKDIR /workspace/repositories
+RUN git clone https://github.com/sgomezru/ModelAdapter.git
 ## surface distances
 WORKDIR /workspace/repositories
 RUN git clone https://github.com/deepmind/surface-distance.git
