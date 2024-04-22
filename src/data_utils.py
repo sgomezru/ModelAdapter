@@ -20,7 +20,6 @@ from omegaconf import OmegaConf
 import torch
 from torch import Tensor
 from torch import nn
-from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms import functional as F, InterpolationMode
 from sklearn.cluster import KMeans
 from sklearn.metrics import pairwise_distances_argmin_min
@@ -56,17 +55,8 @@ from batchgenerators.dataloading.single_threaded_augmenter import SingleThreaded
 from batchgenerators.dataloading.multi_threaded_augmenter import MultiThreadedAugmenter
 from batchgenerators.dataloading.multi_threaded_augmenter import producer, results_loop
 
-from monai.data import Dataset as mDataset
-from monai.transforms import (
-    CastToTyped,
-    EnsureTyped,
-    RandFlipd,
-    ToTensord
-)
-from monai.transforms import Compose as mCompose
-
 from dataset import *
-
+from torch.utils.data import Dataset, DataLoader
 
 
 class SingleImageMultiViewDataLoader(SlimDataLoaderBase):
@@ -127,9 +117,6 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
         # get random subset from dataset of batch size length
         sample = torch.randint(0, len(self._data), size=(self.batch_size,))
         data   = self._data[sample]
-        print('**** MISVD *****')
-        print(data.keys())
-        print('**** MISVD *****')
         # split into input and target
         img    = data['input']
         tar    = data['target']
@@ -138,9 +125,6 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
         out = {'data': img.numpy().astype(np.float32), 
                'seg':  tar.numpy().astype(np.float32)}
         
-        print('**** MISVD *****')
-        print(out.keys())
-        print('**** MISVD *****')
         # if the original data is also needed, activate this flag to store it where augmentations
         # cant find it.
         if self.return_orig:
@@ -320,27 +304,13 @@ class Transforms(object):
             ),
         ]
 
-        monai_io_transforms = [
-            ToTensord(keys=['data', 'seg']),
-        ]
-        monai_spatial_transforms = [
-            RandFlipd(keys=['data', 'seg'], spatial_axis=[0], prob=0.5),
-            RandFlipd(keys=['data', 'seg'], spatial_axis=[1], prob=0.5),
-        ]
-        monai_type_transforms = [
-            CastToTyped(keys=['data', 'seg'], dtype=(np.float32, torch.long)),
-            EnsureTyped(keys=['data', 'seg'])
-        ]
         self.transforms = {
             'io_transforms': io_transforms,
             'global_nonspatial_transforms': global_nonspatial_transforms + io_transforms,
             'global_transforms': global_transforms + io_transforms,
             'local_transforms': global_nonspatial_transforms + local_transforms + io_transforms,
             'local_val_transforms': local_transforms + io_transforms,
-            'all_transforms': local_transforms + global_transforms + io_transforms,
-            'monai_base_transforms': monai_io_transforms + monai_type_transforms,
-            'monai_spatial_transforms': monai_spatial_transforms,
-            'monai_all_transforms': monai_io_transforms + monai_spatial_transforms + monai_type_transforms
+            'all_transforms': local_transforms + global_transforms + io_transforms
         }
 
     def get_transforms(
@@ -1085,6 +1055,8 @@ def get_train_loader(
         train_loader, val_loader = get_brain_train_loader(training=training, cfg=cfg)
     elif cfg.run.data_key == 'heart':
         train_loader, val_loader = get_heart_train_loader(training=training, cfg=cfg)
+    elif cfg.run.data_key == 'prostate':
+        train_loader, val_loader = get_pmri_data_loaders(training=training, cfg=cfg)
     else:
         raise ValueError(f"Unknown task {cfg.run.data_key}. Task key must be either 'brain' or 'heart'")
     return train_loader, val_loader
@@ -1280,26 +1252,17 @@ def get_heart_train_loader(
 
 def get_pmri_data_loaders(cfg: OmegaConf):
     data = get_pmri_eval_data(train_set=True, val_set=True, cfg=cfg)
-    train_transform_key = 'monai_all_transforms'
-    val_transform_key = 'monai_base_transforms'
+    train_transform_key = 'all_transforms'
+    val_transform_key = 'io_transforms'
     transforms = Transforms()
-    # transforms = mCompose(
-        # ToTensord(keys=['input', 'target']),
-        # RandFlipd(keys=['input', 'target'], spatial_axis=[0], prob=0.5),
-        # RandFlipd(keys=['input', 'target'], spatial_axis=[1], prob=0.5),
-        # CastToTyped(keys=['input', 'target'], dtype=(np.float32, torch.long)),
-        # EnsureTyped(keys=['input', 'target'])
-    # )
-    train_dataset = mDataset(data['train'])
     model_cfg = cfg.unet.prostate
-    val_dataset = mDataset(data['val'])
     train_loader = MultiImageSingleViewDataLoader(
-        data=train_dataset,
+        data=data['train'],
         batch_size=model_cfg.training.batch_size,
         return_orig=False
     )    
     val_loader = MultiImageSingleViewDataLoader(
-        data=val_dataset,
+        data=data['val'],
         batch_size=model_cfg.training.batch_size,
         return_orig=False
     )

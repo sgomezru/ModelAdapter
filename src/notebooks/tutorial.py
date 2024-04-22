@@ -4,20 +4,14 @@
 # %%
 ### Set CUDA device
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 # %%
-from torch import Tensor
 import sys
 from omegaconf import OmegaConf
-import matplotlib.pyplot as plt
-import seaborn as sns
-from typing import List, Callable, Tuple
-from copy import deepcopy
 import wandb
 
 sys.path.append('../')
-from data_utils import get_eval_data
 from model.unet import get_unet
 
 # %%

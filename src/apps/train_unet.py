@@ -1,7 +1,7 @@
 import sys
 import wandb
 import hydra
-from omegaconf import OmegaConf, open_dict
+from omegaconf import OmegaConf
 
 sys.path.append('../')
 from data_utils import get_train_loader

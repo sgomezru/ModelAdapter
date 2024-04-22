@@ -991,10 +991,9 @@ class UNetTrainerPMRI():
         patience: int = 5, 
         es_mode: str = 'min', 
         eval_metrics: Dict[str, nn.Module] = None,
-        log: bool = True,
-        device = 0,
+        log: bool = True
     ):
-        self.device       = device
+        self.device       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model        = model.to(self.device)
         self.criterion    = criterion
         self.train_loader = train_loader
@@ -1046,7 +1045,6 @@ class UNetTrainerPMRI():
         
     def load_model(self):
         savepath = f'{self.self.weight_dir}{self.description}_best.pt'
-        print(savepath)
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -1058,12 +1056,12 @@ class UNetTrainerPMRI():
         loss_list, batch_sizes = [], []
         for it in range(self.num_batches_per_epoch):
             batch = next(self.train_loader)
-            input_ = batch['input'].float()
-            target = batch['target'].squeeze(1)
+            input_ = batch['data'].float().permute(3,0,1,2)
+            target = batch['target'].long().permute(3,0,1,2).squeeze(1).to(self.device)
             self.optimizer.zero_grad()
             with autocast():
                 net_out = self.inference_step(input_)
-                loss = self.criterion(net_out, target.to(self.device))
+                loss = self.criterion(net_out, target)
             #loss.backward()
             self.scaler.scale(loss).backward()
             self.scaler.unscale_(self.optimizer)
@@ -1104,8 +1102,8 @@ class UNetTrainerPMRI():
             epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
         for it in range(self.num_val_batches_per_epoch):
             batch = next(self.val_loader)
-            input_ = batch['input'].float()
-            target = batch['target'].squeeze(1).to(self.device)
+            input_ = batch['data'].float().permute(3,0,1,2)
+            target = batch['target'].long().permute(3,0,1,2).squeeze(1).to(self.device)
             net_out = self.inference_step(input_)
             loss_list.append(self.criterion(net_out, target).item())
             batch_sizes.append(input_.shape[0])
@@ -1138,8 +1136,8 @@ class UNetTrainerPMRI():
         if self.eval_metrics is not None:
             epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
         for batch in testloader:
-            input_ = batch['input']
-            target = batch['target'].squeeze(1)
+            input_ = batch['data'].float().permute(3,0,1,2)
+            target = batch['target'].long().squeeze(1).permute(3,0,1,2).to(self.device)
             batch_sizes.append(input_.shape[0])
             
             input_chunks  = torch.split(input_, 32, dim=0)

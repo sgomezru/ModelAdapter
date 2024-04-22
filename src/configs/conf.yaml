@@ -60,7 +60,7 @@ unet:
             load_only_present: True
             augment: True
             validation: True
-            batch_size: 32
+            batch_size: 8
             num_batches_per_epoch: 250
             num_val_batches_per_epoch: 25 
             epochs: 200
