@@ -93,9 +93,9 @@ def get_unet_prostate_trainer(
     model_cfg = cfg.unet[cfg.run.data_key]
     num_batches_per_epoch = model_cfg.training.num_batches_per_epoch
     num_val_batches_per_epoch = model_cfg.training.num_val_batches_per_epoch
-    description = f'{cfg.run.data_key}_{model_cfg.pre}_{cfg.run.iteration}'
-    weight_dir = cfg.unet.weight_dir,
-    log_dir = cfg.unet.log_dir, 
+    name = f'{cfg.run.data_key}_{model_cfg.pre}_{cfg.run.iteration}'
+    weight_dir = cfg.fs.weight_dir,
+    log_dir = cfg.fs.log_dir, 
     lr = model_cfg.training.lr
     n_epochs = model_cfg.training.epochs
     patience = model_cfg.training.patience
@@ -116,7 +116,8 @@ def get_unet_prostate_trainer(
         patience = patience, 
         es_mode = 'min', 
         eval_metrics = None, 
-        log = log, 
+        log = log,
+        name = name
     )
 
 def get_unet_heart_trainer(
@@ -991,17 +992,19 @@ class UNetTrainerPMRI():
         patience: int = 5, 
         es_mode: str = 'min', 
         eval_metrics: Dict[str, nn.Module] = None,
-        log: bool = True
+        log: bool = True,
+        name: str = 'pmri-unet'
     ):
         self.device       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.name         = name
         self.model        = model.to(self.device)
         self.criterion    = criterion
         self.train_loader = train_loader
-        self.val_loader = val_loader
+        self.val_loader   = val_loader
         self.num_batches_per_epoch = num_batches_per_epoch
         self.num_val_batches_per_epoch = num_val_batches_per_epoch
-        self.weight_dir   = weight_dir
-        self.log_dir      = log_dir
+        self.weight_dir   = weight_dir[0] if isinstance(weight_dir, tuple) else weight_dir
+        self.log_dir      = log_dir[0] if isinstance(log_dir, tuple) else log_dir
         self.lr           = lr
         self.n_epochs     = n_epochs
         self.patience     = patience
@@ -1027,7 +1030,7 @@ class UNetTrainerPMRI():
     def save_hist(self):
         if(not os.path.exists(self.log_dir)):
             os.makedirs(self.log_dir)
-        savepath = f'{self.log_dir}{self.description}.npy'
+        savepath = os.path.join(self.log_dir, f'{self.name}.npy')
         np.save(savepath, self.history)
         return
     
@@ -1035,7 +1038,7 @@ class UNetTrainerPMRI():
         if(not os.path.exists(self.weight_dir)):
             os.makedirs(self.weight_dir)
 
-        savepath = f'{self.weight_dir}{self.description}_best.pt'
+        savepath = os.path.join(self.weight_dir, f'{self.name}_best.pt')
         torch.save({
         'model_state_dict': self.model.state_dict(),
         'optimizer_state_dict': self.optimizer.state_dict(),
@@ -1044,26 +1047,31 @@ class UNetTrainerPMRI():
         return
         
     def load_model(self):
-        savepath = f'{self.self.weight_dir}{self.description}_best.pt'
+        savepath = os.path.join(self.self.weight_dir, f'{self.description}_best.pt')
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        savepath = f'{self.weight_dir}{self.description}.npy'
-        self.history = np.load(savepath,allow_pickle='TRUE').item()
+        savepath = os.path.join(self.weight_dir,f'{self.description}.npy')
+        self.history = np.load(savepath, allow_pickle='TRUE').item()
         return
     
     def train_epoch(self):
         loss_list, batch_sizes = [], []
         for it in range(self.num_batches_per_epoch):
             batch = next(self.train_loader)
-            input_ = batch['data'].float().permute(3,0,1,2)
-            target = batch['target'].long().permute(3,0,1,2).squeeze(1).to(self.device)
+            input_ = batch['data'].float()
+            target = batch['target'].long().squeeze(1).to(self.device)
+            if torch.isnan(input_).any(): print('NAN in input');
+            if torch.isnan(target).any(): print('NAN in target');
             self.optimizer.zero_grad()
-            with autocast():
+            with autocast(enabled=False):
                 net_out = self.inference_step(input_)
                 loss = self.criterion(net_out, target)
+                if torch.isnan(net_out).any(): print('Train: NAN in model output');
+                if torch.isnan(loss).any(): print('Train: NAN in original loss');
             #loss.backward()
             self.scaler.scale(loss).backward()
+            if torch.isnan(loss).any(): print('NAN in scaled backwarded loss');
             self.scaler.unscale_(self.optimizer)
             nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0, norm_type=2.0)
             #self.optimizer.step()
@@ -1102,10 +1110,13 @@ class UNetTrainerPMRI():
             epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
         for it in range(self.num_val_batches_per_epoch):
             batch = next(self.val_loader)
-            input_ = batch['data'].float().permute(3,0,1,2)
-            target = batch['target'].long().permute(3,0,1,2).squeeze(1).to(self.device)
+            input_ = batch['data'].float()
+            target = batch['target'].long().squeeze(1).to(self.device)
             net_out = self.inference_step(input_)
-            loss_list.append(self.criterion(net_out, target).item())
+            loss = self.criterion(net_out, target)
+            if torch.isnan(net_out).any(): print('Eval: NAN in model output');
+            if torch.isnan(loss).any(): print('Eval: NAN in original loss');
+            loss_list.append(loss.item())
             batch_sizes.append(input_.shape[0])
             if self.eval_metrics is not None:
                 for key, metric in self.eval_metrics.items():
@@ -1136,8 +1147,8 @@ class UNetTrainerPMRI():
         if self.eval_metrics is not None:
             epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
         for batch in testloader:
-            input_ = batch['data'].float().permute(3,0,1,2)
-            target = batch['target'].long().squeeze(1).permute(3,0,1,2).to(self.device)
+            input_ = batch['data'].float()
+            target = batch['target'].long().squeeze(1).to(self.device)
             batch_sizes.append(input_.shape[0])
             
             input_chunks  = torch.split(input_, 32, dim=0)

@@ -4,7 +4,7 @@
 # %%
 ### Set CUDA device
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
 # %%
 import sys
@@ -77,4 +77,7 @@ train_loader, val_loader = get_pmri_data_loaders(cfg=cfg)
 pmri_trainer = get_unet_trainer(cfg=cfg, train_loader=train_loader, val_loader=val_loader, model=unet)
 
 # %%
-pmri_trainer.fit()
+try:
+    pmri_trainer.fit()
+finally:
+    wandb.finish()

@@ -66,7 +66,7 @@ class MultisiteMRIProstateDataset(Dataset):
 
     def __init__(self, datapath, vendor, split='all', load_only_present=False, seed=42):
         assert vendor in ['siemens', 'ge', 'philips'], 'Invalid vendor'
-        assert split in ['all', 'train', 'test']
+        assert split in ['all', 'train', 'valid']
         self.vendor = vendor
         self._datapath = Path(datapath).resolve()
         self._split = split
@@ -109,6 +109,7 @@ class MultisiteMRIProstateDataset(Dataset):
             split_idx = int(len(num_cases) * 0.8)
             cases = num_cases[:split_idx] if self._split == 'train' else num_cases[split_idx:]
             self.input = [self.input[i] for i in cases]
+            self.target = [self.target[i] for i in cases]
 
         # Concat around last axis (single slices)
         self.input = torch.from_numpy(np.concatenate(self.input, axis=-1))

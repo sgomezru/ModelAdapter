@@ -41,7 +41,11 @@ def get_unet(
     return_state_dict=False,
 ) -> Union[nn.Module, Tuple[nn.Module, Dict]]:
 
-    unet_cfg    = cfg.unet[cfg.run.data_key]
+    if cfg.run.get('dataset_subkey') is not None and \
+        cfg.run.get('dataset_key') is not None:
+        unet_cfg = cfg.unet[cfg.run.dataset_key][cfg.run.dataset_subkey]
+    else:
+        unet_cfg = cfg.unet[cfg.run.data_key]
 
     if unet_cfg.arch == 'default':
         unet = get_default_unet_arch(cfg)

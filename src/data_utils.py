@@ -107,11 +107,13 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
         self, 
         data: Dataset, 
         batch_size: int, 
-        return_orig: str = True
+        return_orig: str = True,
+        permute: bool = False
     ):
         super(MultiImageSingleViewDataLoader, self).__init__(data, batch_size)
         # data is now stored in self._data.
         self.return_orig = return_orig
+        self.permute = permute
     
     def generate_train_batch(self):
         # get random subset from dataset of batch size length
@@ -120,6 +122,10 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
         # split into input and target
         img    = data['input']
         tar    = data['target']
+
+        if self.permute:
+            img = img.permute(3,0,1,2)
+            tar = tar.permute(3,0,1,2)
         
         #construct the dictionary and return it. np.float32 cast because most networks take float
         out = {'data': img.numpy().astype(np.float32), 
@@ -130,7 +136,7 @@ class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
         if self.return_orig:
             out['data_orig']   = img
             out['target_orig'] = tar
-        
+
         return out
 
 class Transforms(object):
@@ -714,6 +720,7 @@ def get_pmri_eval_data(
     datapath = cfg.fs.root + cfg.data.prostate.pmri.data_path
     data = {}
     if train_set:
+        print('Loading training PMRI dataset...')
         data['train'] = MultisiteMRIProstateDataset(
             datapath=datapath,
             vendor=cfg.unet.prostate.training.vendor,
@@ -721,10 +728,11 @@ def get_pmri_eval_data(
             load_only_present=cfg.unet.prostate.training.load_only_present
         )
     if val_set:
+        print('Loading validation PMRI dataset...')
         data['val'] = MultisiteMRIProstateDataset(
             datapath=datapath,
             vendor=cfg.unet.prostate.training.vendor,
-            split='test',
+            split='valid',
             load_only_present=cfg.unet.prostate.training.load_only_present
         )
     assert len(data) > 0, "No data sets selected."
@@ -1259,12 +1267,14 @@ def get_pmri_data_loaders(cfg: OmegaConf):
     train_loader = MultiImageSingleViewDataLoader(
         data=data['train'],
         batch_size=model_cfg.training.batch_size,
-        return_orig=False
+        return_orig=False,
+        permute=True
     )    
     val_loader = MultiImageSingleViewDataLoader(
         data=data['val'],
         batch_size=model_cfg.training.batch_size,
-        return_orig=False
+        return_orig=False,
+        permute=True
     )
     train_augmentor = transforms.get_transforms(train_transform_key)
     valid_augmentor = transforms.get_transforms(val_transform_key)
