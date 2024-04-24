@@ -17,7 +17,6 @@ def loss_VAE(preds, gt, mu, log_var, lambda_=0.01):
 
     return loss
 
-
 class FocalLoss(nn.Module):
     """
     BCE loss with focal factor from
@@ -66,6 +65,40 @@ class SurfaceDiceCalgary(nn.Module):
         surface_dice     = compute_surface_dice_at_tolerance(surface_distance, self.tolerance)
         return torch.tensor(surface_dice)
 
+class DiceScorePMRI(nn.Module):
+
+    def __init__(self, eps=1e-8):
+        self.eps = eps
+        super().__init__()
+
+    def forward(self, input_, target):
+        batch_size = input_.size(0)
+        input_ = torch.argmax(input_, dim=1)
+        input_ = (torch.sigmoid(input_) > 0.5) * 1
+        iflat  = input_.reshape(batch_size, -1)
+        tflat  = target.reshape(batch_size, -1)
+        intersection = (iflat * tflat).sum(dim=1)
+        union        = iflat.sum(dim=1) + tflat.sum(dim=1)
+        dice         = (2.0 * intersection + self.eps) / (union + self.eps)
+        return dice
+
+class TrainLossPMRI(nn.Module):
+
+    def __init__(self, eps=1e-8):
+        self.eps = eps
+        super().__init__()
+        self.cross = nn.CrossEntropyLoss()
+
+    def forward(self, input_, target):
+        ce = self.cross(input_, target)
+        input_ = torch.argmax(input_, dim=1)
+        input_ = (torch.sigmoid(input_) > 0.5) * 1
+        iflat  = input_.reshape(-1)
+        tflat  = target.reshape(-1)
+        intersection = (iflat * tflat).sum()
+        union        = iflat.sum() + tflat.sum()
+        dice         = (2.0 * intersection + self.eps) / (union + self.eps)
+        return 1 - dice + ce
     
 class DiceScoreCalgary(nn.Module):
     

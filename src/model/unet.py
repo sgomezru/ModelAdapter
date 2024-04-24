@@ -7,6 +7,7 @@ https://github.com/kechua/DART20/blob/master/damri/model/unet.py
 from __future__ import annotations
 
 import warnings
+import os
 from collections.abc import Sequence
 from typing import (
     Dict,
@@ -75,12 +76,12 @@ def get_unet(
         OmegaConf.set_struct(cfg, True)
 
     if return_state_dict:
+        # weight_dir = cfg.unet.weight_dir[0] if isinstance(cfg.unet.weight_dir, tuple) else cfg.unet.weight_dir
+        weight_dir = cfg.fs.weight_dir[0] if isinstance(cfg.fs.weight_dir, tuple) else cfg.fs.weight_dir
         unet_name = f'{cfg.run.data_key}_{unet_cfg.pre}_{cfg.run.iteration}'
-        model_path = f'{cfg.unet.weight_dir}{unet_name}_best.pt'
+        model_path = os.path.join(weight_dir, f'{unet_name}_best.pt')
         state_dict = torch.load(model_path)['model_state_dict']
-
         return unet, state_dict
-    
     else:
         return unet
 

@@ -678,8 +678,6 @@ def get_subset(
 
     return subset
 
-
-
 def get_eval_data(
     cfg: OmegaConf,
     train_set: bool = False,
@@ -707,7 +705,6 @@ def get_eval_data(
         data = get_pmri_eval_data(
             train_set=train_set,
             val_set=val_set,
-            test_sets=test_sets,
             cfg=cfg
         )
     return data
@@ -715,7 +712,7 @@ def get_eval_data(
 def get_pmri_eval_data(
         train_set: bool,
         val_set: bool,
-        cfg: OmegaConf,
+        cfg: OmegaConf
 ):
     datapath = cfg.fs.root + cfg.data.prostate.pmri.data_path
     data = {}

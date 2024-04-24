@@ -26,7 +26,8 @@ from losses import (
     DiceScoreCalgary, 
     SurfaceDiceCalgary,
     CrossEntropyTargetArgmax,
-    DiceScoreMMS
+    DiceScoreMMS,
+    TrainLossPMRI
 )
 
 def get_unet_trainer(
@@ -100,7 +101,7 @@ def get_unet_prostate_trainer(
     n_epochs = model_cfg.training.epochs
     patience = model_cfg.training.patience
     log = cfg.wandb.log
-    criterion = nn.CrossEntropyLoss()
+    criterion = TrainLossPMRI()
 
     return UNetTrainerPMRI(
         model = model, 
@@ -1047,7 +1048,7 @@ class UNetTrainerPMRI():
         return
         
     def load_model(self):
-        savepath = os.path.join(self.self.weight_dir, f'{self.description}_best.pt')
+        savepath = os.path.join(self.weight_dir, f'{self.description}_best.pt')
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
