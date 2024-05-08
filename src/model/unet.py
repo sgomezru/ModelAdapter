@@ -80,11 +80,11 @@ def get_unet(
         weight_dir = cfg.fs.weight_dir[0] if isinstance(cfg.fs.weight_dir, tuple) else cfg.fs.weight_dir
         unet_name = f'{cfg.run.data_key}_{unet_cfg.pre}_{cfg.run.iteration}'
         model_path = os.path.join(weight_dir, f'{unet_name}_best.pt')
-        state_dict = torch.load(model_path)['model_state_dict']
+        state_dict = torch.load(model_path)
+        unet.load_state_dict(state_dict['model_state_dict'])
         return unet, state_dict
     else:
         return unet
-
 
 
 def get_default_unet_arch(
@@ -100,7 +100,6 @@ def get_default_unet_arch(
         n_chans_out=n_chans_out, 
         n_filters_init=n_filters_init
     )
-
 
 
 def get_monai_unet_arch(

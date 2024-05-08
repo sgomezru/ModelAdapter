@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 import sys
 from omegaconf import OmegaConf
@@ -10,7 +10,7 @@ from model.unet import get_unet
 
 ### Load basic config
 cfg = OmegaConf.load('../configs/conf.yaml')
-OmegaConf.update(cfg, 'run.iteration', 1)
+OmegaConf.update(cfg, 'run.iteration', 2)
 DATA_KEY = 'prostate'
 OmegaConf.update(cfg, 'run.data_key', DATA_KEY)
 
@@ -29,6 +29,8 @@ if args[0] == 'monai':
 #     return_state_dict=True)
 # unet.load_state_dict(state_dict)
 # _ = unet.cuda()
+
+cfg.wandb.project = 'TestShapesDCE'
 
 wandb.init(
     project=cfg.wandb.project,

@@ -101,7 +101,8 @@ def get_unet_prostate_trainer(
     n_epochs = model_cfg.training.epochs
     patience = model_cfg.training.patience
     log = cfg.wandb.log
-    criterion = TrainLossPMRI()
+    # criterion = TrainLossPMRI()
+    criterion = nn.CrossEntropyLoss()
 
     return UNetTrainerPMRI(
         model = model, 
@@ -976,7 +977,7 @@ class UNetTrainerACDC():
 
 class UNetTrainerPMRI():
     """
-    Trainer class for training and evaluating a U-Net model for ACDC dataset.
+    Trainer class for training and evaluating a U-Net model for PMRI dataset.
     """
     def __init__(
         self, 
@@ -1035,7 +1036,7 @@ class UNetTrainerPMRI():
         np.save(savepath, self.history)
         return
     
-    def save_model(self):
+    def save_model(self, epoch):
         if(not os.path.exists(self.weight_dir)):
             os.makedirs(self.weight_dir)
 
@@ -1043,17 +1044,19 @@ class UNetTrainerPMRI():
         torch.save({
         'model_state_dict': self.model.state_dict(),
         'optimizer_state_dict': self.optimizer.state_dict(),
+        'epoch': epoch
         }, savepath)
         self.save_hist()
         return
         
     def load_model(self):
-        savepath = os.path.join(self.weight_dir, f'{self.description}_best.pt')
+        savepath = os.path.join(self.weight_dir, f'{self.name}_best.pt')
         checkpoint = torch.load(savepath)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        savepath = os.path.join(self.weight_dir,f'{self.description}.npy')
+        savepath = os.path.join(self.log_dir, f'{self.name}.npy')
         self.history = np.load(savepath, allow_pickle='TRUE').item()
+        print('Loaded model and optimizer')
         return
     
     def train_epoch(self):
@@ -1067,6 +1070,7 @@ class UNetTrainerPMRI():
             self.optimizer.zero_grad()
             with autocast(enabled=False):
                 net_out = self.inference_step(input_)
+                if it == 0: print("Inside training, input, target, net_out", input_.shape, target.shape, net_out.shape)
                 loss = self.criterion(net_out, target)
                 if torch.isnan(net_out).any(): print('Train: NAN in model output');
                 if torch.isnan(loss).any(): print('Train: NAN in original loss');
@@ -1114,6 +1118,7 @@ class UNetTrainerPMRI():
             input_ = batch['data'].float()
             target = batch['target'].long().squeeze(1).to(self.device)
             net_out = self.inference_step(input_)
+            if it == 0: print("Inside eval, input, target, net_out", input_.shape, target.shape, net_out.shape)
             loss = self.criterion(net_out, target)
             if torch.isnan(net_out).any(): print('Eval: NAN in model output');
             if torch.isnan(loss).any(): print('Eval: NAN in original loss');
@@ -1263,11 +1268,11 @@ class UNetTrainerPMRI():
             if self.es_mode == 'min':
                 if es_metric < best_es_metric:
                     best_es_metric = es_metric
-                    self.save_model()
+                    self.save_model(epoch)
             else:
                 if es_metric > best_es_metric:
                     best_es_metric = es_metric
-                    self.save_model()
+                    self.save_model(epoch)
             if(self.es.step(es_metric)):
                 print('Early stopping triggered!')
                 break

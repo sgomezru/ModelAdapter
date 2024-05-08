@@ -1264,13 +1264,13 @@ def get_pmri_data_loaders(cfg: OmegaConf):
     train_loader = MultiImageSingleViewDataLoader(
         data=data['train'],
         batch_size=model_cfg.training.batch_size,
-        return_orig=False,
+        return_orig=True,
         permute=True
     )    
     val_loader = MultiImageSingleViewDataLoader(
         data=data['val'],
         batch_size=model_cfg.training.batch_size,
-        return_orig=False,
+        return_orig=True,
         permute=True
     )
     train_augmentor = transforms.get_transforms(train_transform_key)
