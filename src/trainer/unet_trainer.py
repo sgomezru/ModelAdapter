@@ -29,6 +29,7 @@ from losses import (
     DiceScoreMMS,
     TrainLossPMRI
 )
+from monai.losses.dice import DiceCELoss
 
 def get_unet_trainer(
     cfg, 
@@ -94,7 +95,7 @@ def get_unet_prostate_trainer(
     model_cfg = cfg.unet[cfg.run.data_key]
     num_batches_per_epoch = model_cfg.training.num_batches_per_epoch
     num_val_batches_per_epoch = model_cfg.training.num_val_batches_per_epoch
-    name = f'{cfg.run.data_key}_{model_cfg.pre}_{cfg.run.iteration}'
+    name = f'{cfg.run.data_key}_{model_cfg.pre}_{cfg.wandb.project}_{cfg.run.iteration}'
     weight_dir = cfg.fs.weight_dir,
     log_dir = cfg.fs.log_dir, 
     lr = model_cfg.training.lr
@@ -102,7 +103,7 @@ def get_unet_prostate_trainer(
     patience = model_cfg.training.patience
     log = cfg.wandb.log
     # criterion = TrainLossPMRI()
-    criterion = nn.CrossEntropyLoss()
+    criterion = DiceCELoss(softmax=True, to_onehot_y=True)
 
     return UNetTrainerPMRI(
         model = model, 
@@ -1064,13 +1065,12 @@ class UNetTrainerPMRI():
         for it in range(self.num_batches_per_epoch):
             batch = next(self.train_loader)
             input_ = batch['data'].float()
-            target = batch['target'].long().squeeze(1).to(self.device)
+            target = batch['target'].to(self.device)
             if torch.isnan(input_).any(): print('NAN in input');
             if torch.isnan(target).any(): print('NAN in target');
             self.optimizer.zero_grad()
             with autocast(enabled=False):
                 net_out = self.inference_step(input_)
-                if it == 0: print("Inside training, input, target, net_out", input_.shape, target.shape, net_out.shape)
                 loss = self.criterion(net_out, target)
                 if torch.isnan(net_out).any(): print('Train: NAN in model output');
                 if torch.isnan(loss).any(): print('Train: NAN in original loss');
@@ -1116,9 +1116,8 @@ class UNetTrainerPMRI():
         for it in range(self.num_val_batches_per_epoch):
             batch = next(self.val_loader)
             input_ = batch['data'].float()
-            target = batch['target'].long().squeeze(1).to(self.device)
+            target = batch['target'].to(self.device)
             net_out = self.inference_step(input_)
-            if it == 0: print("Inside eval, input, target, net_out", input_.shape, target.shape, net_out.shape)
             loss = self.criterion(net_out, target)
             if torch.isnan(net_out).any(): print('Eval: NAN in model output');
             if torch.isnan(loss).any(): print('Eval: NAN in original loss');
