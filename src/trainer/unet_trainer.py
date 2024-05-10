@@ -1072,14 +1072,9 @@ class UNetTrainerPMRI():
             with autocast(enabled=False):
                 net_out = self.inference_step(input_)
                 loss = self.criterion(net_out, target)
-                if torch.isnan(net_out).any(): print('Train: NAN in model output');
-                if torch.isnan(loss).any(): print('Train: NAN in original loss');
-            #loss.backward()
             self.scaler.scale(loss).backward()
-            if torch.isnan(loss).any(): print('NAN in scaled backwarded loss');
             self.scaler.unscale_(self.optimizer)
             nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0, norm_type=2.0)
-            #self.optimizer.step()
             self.scaler.step(self.optimizer)
             self.scaler.update()
             loss_list.append(loss.item())
@@ -1119,8 +1114,6 @@ class UNetTrainerPMRI():
             target = batch['target'].to(self.device)
             net_out = self.inference_step(input_)
             loss = self.criterion(net_out, target)
-            if torch.isnan(net_out).any(): print('Eval: NAN in model output');
-            if torch.isnan(loss).any(): print('Eval: NAN in original loss');
             loss_list.append(loss.item())
             batch_sizes.append(input_.shape[0])
             if self.eval_metrics is not None:
