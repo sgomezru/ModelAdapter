@@ -1066,8 +1066,6 @@ class UNetTrainerPMRI():
             batch = next(self.train_loader)
             input_ = batch['data'].float()
             target = batch['target'].to(self.device)
-            if torch.isnan(input_).any(): print('NAN in input');
-            if torch.isnan(target).any(): print('NAN in target');
             self.optimizer.zero_grad()
             with autocast(enabled=False):
                 net_out = self.inference_step(input_)
@@ -1146,20 +1144,20 @@ class UNetTrainerPMRI():
             epoch_metrics = {key: [] for key in self.eval_metrics.keys()}
         for batch in testloader:
             input_ = batch['data'].float()
-            target = batch['target'].long().squeeze(1).to(self.device)
+            target = batch['target'].to(self.device)
             batch_sizes.append(input_.shape[0])
             
             input_chunks  = torch.split(input_, 32, dim=0)
             target_chunks = torch.split(target, 32, dim=0)
             net_out = []
             for input_chunk, target_chunk in zip(input_chunks, target_chunks):
-                net_out_chunk = self.inference_step(input_chunk.to(self.device))
+                net_out_chunk = self.inference_step(input_chunk)
                 net_out.append(net_out_chunk.detach().cpu())
                 
             net_out = torch.cat(net_out, dim=0)
             if self.eval_metrics is not None:
                 for key, metric in self.eval_metrics.items():
-                    epoch_metrics[key].append(metric(net_out,target).detach().mean().cpu())
+                    epoch_metrics[key].append(metric(net_out, target).detach().mean().cpu())
                     
         if self.eval_metrics is not None:
             for key, epoch_scores in epoch_metrics.items():

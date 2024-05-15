@@ -40,6 +40,7 @@ from batchgenerators.transforms.utility_transforms import (
     RenameTransform, 
     NumpyToTensor
 )
+from batchgenerators.transforms.crop_and_pad_transforms import CenterCropTransform
 from batchgenerators.dataloading.data_loader import SlimDataLoaderBase
 from batchgenerators.transforms.local_transforms import (
     BrightnessGradientAdditiveTransform,
@@ -57,6 +58,7 @@ from batchgenerators.dataloading.multi_threaded_augmenter import producer, resul
 
 from dataset import *
 from torch.utils.data import Dataset, DataLoader
+
 
 
 class SingleImageMultiViewDataLoader(SlimDataLoaderBase):
@@ -95,8 +97,6 @@ class SingleImageMultiViewDataLoader(SlimDataLoaderBase):
         
         return out
     
-    
-
 class MultiImageSingleViewDataLoader(SlimDataLoaderBase):
     """Multi image single view dataloader.
     
@@ -184,7 +184,45 @@ class Transforms(object):
                 keys = ['data', 'target'], 
                 cast_to = 'float')    
         ]
-       
+
+        eval_io_transforms = [
+            CenterCropTransform(
+                crop_size = 256,
+                data_key = 'data',
+                label_key = 'target'
+            ),
+            NumpyToTensor(
+                keys = ['data'],
+                cast_to = 'float'
+            ),
+            NumpyToTensor(
+                keys = ['target'],
+                cast_to = 'long'
+            ),
+        ]
+
+        valid_io_transforms = [
+            RemoveLabelTransform(
+                output_key = 'seg',
+                input_key = 'seg',
+                replace_with = 0,
+                remove_label = -1
+            ),
+            RenameTransform(
+                delete_old = True,
+                out_key = 'target',
+                in_key = 'seg'
+            ),
+            CenterCropTransform(
+                crop_size = 256,
+                data_key = 'data',
+                label_key = 'target'
+            ),
+            NumpyToTensor(
+                keys = ['data', 'target'],
+                cast_to = 'float')
+        ]
+
         global_nonspatial_transforms = [
             SimulateLowResolutionTransform(
                 order_upsample = 3, 
@@ -282,7 +320,6 @@ class Transforms(object):
             ),
         ]       
         
-        
         local_transforms = [
             BrightnessGradientAdditiveTransform(
                 scale=200, 
@@ -312,6 +349,8 @@ class Transforms(object):
 
         self.transforms = {
             'io_transforms': io_transforms,
+            'valid_io_transforms': valid_io_transforms,
+            'eval_io_transforms': eval_io_transforms,
             'global_nonspatial_transforms': global_nonspatial_transforms + io_transforms,
             'global_transforms': global_transforms + io_transforms,
             'local_transforms': global_nonspatial_transforms + local_transforms + io_transforms,
@@ -682,6 +721,7 @@ def get_eval_data(
     cfg: OmegaConf,
     train_set: bool = False,
     val_set: bool = False,
+    eval_set: bool = False,
     test_sets: Union[List, str] = [],
     subset_dict: Optional[dict] = None
 ):
@@ -702,16 +742,18 @@ def get_eval_data(
             cfg=cfg
         )
     elif cfg.run.data_key == 'prostate':
-        data = get_pmri_eval_data(
+        data = get_pmri_data(
             train_set=train_set,
             val_set=val_set,
+            eval_set=eval_set,
             cfg=cfg
         )
     return data
 
-def get_pmri_eval_data(
+def get_pmri_data(
         train_set: bool,
         val_set: bool,
+        eval_set: bool,
         cfg: OmegaConf
 ):
     datapath = cfg.fs.root + cfg.data.prostate.pmri.data_path
@@ -722,7 +764,8 @@ def get_pmri_eval_data(
             datapath=datapath,
             vendor=cfg.unet.prostate.training.vendor,
             split='train',
-            load_only_present=cfg.unet.prostate.training.load_only_present
+            load_only_present=cfg.unet.prostate.training.load_only_present,
+            format=cfg.format
         )
     if val_set:
         print('Loading validation PMRI dataset...')
@@ -730,7 +773,20 @@ def get_pmri_eval_data(
             datapath=datapath,
             vendor=cfg.unet.prostate.training.vendor,
             split='valid',
-            load_only_present=cfg.unet.prostate.training.load_only_present
+            load_only_present=cfg.unet.prostate.training.load_only_present,
+            format=cfg.format
+        )
+    if eval_set:
+        print('Loading evaluation PMRI dataset...')
+        transforms = Transforms()
+        data['eval'] = MultisiteMRIProstateDataset(
+            datapath=datapath,
+            vendor=cfg.unet.prostate.training.vendor,
+            split='eval',
+            load_only_present=cfg.unet.prostate.training.load_only_present,
+            format=cfg.format,
+            transform=transforms.get_transforms('eval_io_transforms'),
+            subset=cfg.unet.prostate.training.subset
         )
     assert len(data) > 0, "No data sets selected."
     return data
@@ -1256,21 +1312,21 @@ def get_heart_train_loader(
     return train_gen, valid_gen
 
 def get_pmri_data_loaders(cfg: OmegaConf):
-    data = get_pmri_eval_data(train_set=True, val_set=True, cfg=cfg)
+    data = get_pmri_data(train_set=True, val_set=True, cfg=cfg)
     train_transform_key = 'all_transforms'
-    val_transform_key = 'io_transforms'
+    val_transform_key = 'valid_io_transforms'
     transforms = Transforms()
     model_cfg = cfg.unet.prostate
     train_loader = MultiImageSingleViewDataLoader(
         data=data['train'],
         batch_size=model_cfg.training.batch_size,
-        return_orig=True,
+        return_orig=False,
         permute=True
     )    
     val_loader = MultiImageSingleViewDataLoader(
         data=data['val'],
         batch_size=model_cfg.training.batch_size,
-        return_orig=True,
+        return_orig=False,
         permute=True
     )
     train_augmentor = transforms.get_transforms(train_transform_key)

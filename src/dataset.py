@@ -28,7 +28,6 @@ from batchgenerators.utilities.file_and_folder_operations import *
 from nnunet.paths import preprocessing_output_dir
 from nnunet.training.dataloading.dataset_loading import *
 
-# - local source
 from augment import RandAugmentWithLabels, _apply_op
 
 class MultisiteMRIProstateDataset(Dataset):
@@ -64,14 +63,17 @@ class MultisiteMRIProstateDataset(Dataset):
         'size': (384, 384) 
     }
 
-    def __init__(self, datapath, vendor, split='all', load_only_present=False, seed=42):
+    def __init__(self, datapath, vendor, split='all', load_only_present=False, format='torch', transform=None, subset=False, seed=42):
         assert vendor in ['siemens', 'ge', 'philips'], 'Invalid vendor'
-        assert split in ['all', 'train', 'valid']
+        assert split in ['all', 'train', 'valid', 'eval']
         self.vendor = vendor
         self._datapath = Path(datapath).resolve()
         self._split = split
         self._load_only_present = load_only_present
         self._seed = seed
+        self._format = format
+        self._subset = subset
+        self._transform = transform
         self._load_data()
 
     def _load_data(self):
@@ -102,32 +104,34 @@ class MultisiteMRIProstateDataset(Dataset):
                     self.input.append(x)
                     self.target.append(y)
         # Split here
-        if self._split != 'all':
+        if (self._split in ['train', 'valid']) or (self._split == 'eval' and self._subset is True):
             num_cases = list(range(len(self.input)))
+            split_idx = int(len(num_cases) * 0.8)
             rng = random.Random(self._seed)
             rng.shuffle(num_cases)
-            split_idx = int(len(num_cases) * 0.8)
             cases = num_cases[:split_idx] if self._split == 'train' else num_cases[split_idx:]
             self.input = [self.input[i] for i in cases]
             self.target = [self.target[i] for i in cases]
 
-        # Concat around last axis (single slices)
-        self.input = torch.from_numpy(np.concatenate(self.input, axis=-1))
-        self.target = torch.from_numpy(np.concatenate(self.target, axis=-1))
+        # Concat around last axis (all single slices)
+        self.input = np.concatenate(self.input, axis=-1)
+        self.input = np.expand_dims(self.input, axis=0) # self.input = self.input.unsqueeze(0) # Input final shape after unsqueeze: (1, H, W, Num_slices)
+        self.target = np.concatenate(self.target, axis=-1)
+        self.target = np.expand_dims(self.target, axis=0) # self.target = self.target.unsqueeze(0) # Target final shape after unsqueeze: (1, H, W, Num_slices)
+        if self._format == 'torch':
+            self.input = torch.from_numpy(self.input)
+            self.target = torch.from_numpy(self.target)
         # Relabel cases if there are two prostate classes (Since not all datasets distinguish between the two)
         self.target[self.target == 2] = 1
-        # Adding channel dimension
-        self.input = self.input.unsqueeze(0)
-        self.target = self.target.unsqueeze(0)
 
     def __len__(self):
         return self.input.shape[-1]
 
     def __getitem__(self, idx):
-        return {
-            "input": self.input[..., idx],
-            "target": self.target[..., idx]
-        }
+        obj = {"input": self.input[..., idx], "target": self.target[..., idx]}
+        if self._transform is not None:
+             obj = self._transform(**obj)
+        return obj
 
 class CalgaryCampinasDataset(Dataset):
     def __init__(
