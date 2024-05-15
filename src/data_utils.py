@@ -188,11 +188,11 @@ class Transforms(object):
         eval_io_transforms = [
             CenterCropTransform(
                 crop_size = 256,
-                data_key = 'data',
+                data_key = 'input',
                 label_key = 'target'
             ),
             NumpyToTensor(
-                keys = ['data'],
+                keys = ['input'],
                 cast_to = 'float'
             ),
             NumpyToTensor(

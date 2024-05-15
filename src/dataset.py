@@ -130,7 +130,11 @@ class MultisiteMRIProstateDataset(Dataset):
     def __getitem__(self, idx):
         obj = {"input": self.input[..., idx], "target": self.target[..., idx]}
         if self._transform is not None:
-             obj = self._transform(**obj)
+            obj['input'] = np.expand_dims(obj['input'], axis=0)
+            obj['target'] = np.expand_dims(obj['target'], axis=0)
+            obj = self._transform(**obj)
+            obj['input'] = np.squeeze(obj['input'], axis=0)
+            obj['target'] = np.squeeze(obj['target'], axis=0)
         return obj
 
 class CalgaryCampinasDataset(Dataset):
