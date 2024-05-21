@@ -12,18 +12,19 @@ from trainer.unet_trainer import get_unet_trainer
 
 ### Load basic config
 DATA_KEY = 'prostate'
-ITERATION = 0
+ITERATION = 1
 cfg = OmegaConf.load('../configs/conf.yaml')
 OmegaConf.update(cfg, 'run.iteration', ITERATION)
 OmegaConf.update(cfg, 'run.data_key', DATA_KEY)
 
 unet_name = 'monai-64-4-4'
-extra_description = ''
+extra_description = 'moredata'
 cfg.wandb.project = f'{DATA_KEY}_{unet_name}_{ITERATION}{extra_description}'
 args = unet_name.split('-')
 cfg.unet[DATA_KEY].pre = unet_name
 cfg.unet[DATA_KEY].arch = args[0]
 cfg.unet[DATA_KEY].n_filters_init = None if unet_name == 'swinunetr' else int(args[1])
+cfg.format = 'torch'
 if args[0] == 'monai':
     cfg.unet[DATA_KEY].depth = int(args[2])
     cfg.unet[DATA_KEY].num_res_units = int(args[3])
