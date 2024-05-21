@@ -28,13 +28,6 @@ if args[0] == 'monai':
     cfg.unet[DATA_KEY].depth = int(args[2])
     cfg.unet[DATA_KEY].num_res_units = int(args[3])
 
-# unet, state_dict = get_unet(
-#     cfg,
-#     update_cfg_with_swivels=False,
-#     return_state_dict=True)
-# unet.load_state_dict(state_dict)
-# _ = unet.cuda()
-
 wandb.init(
     project=cfg.wandb.project,
     config={

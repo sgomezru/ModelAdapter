@@ -759,7 +759,7 @@ def get_pmri_data(
     datapath = cfg.fs.root + cfg.data.prostate.pmri.data_path
     data = {}
     if train_set:
-        print('Loading training PMRI dataset...')
+        print(f'Loading training PMRI dataset for vendor {cfg.unet.prostate.training.vendor} ...')
         data['train'] = MultisiteMRIProstateDataset(
             datapath=datapath,
             vendor=cfg.unet.prostate.training.vendor,
@@ -768,7 +768,7 @@ def get_pmri_data(
             format=cfg.format
         )
     if val_set:
-        print('Loading validation PMRI dataset...')
+        print(f'Loading validation PMRI dataset for vendor {cfg.unet.prostate.training.vendor} ...')
         data['val'] = MultisiteMRIProstateDataset(
             datapath=datapath,
             vendor=cfg.unet.prostate.training.vendor,
@@ -777,7 +777,7 @@ def get_pmri_data(
             format=cfg.format
         )
     if eval_set:
-        print('Loading evaluation PMRI dataset...')
+        print(f'Loading evaluation PMRI dataset for vendor {cfg.unet.prostate.training.vendor} ...')
         transforms = Transforms()
         data['eval'] = MultisiteMRIProstateDataset(
             datapath=datapath,
@@ -1312,7 +1312,7 @@ def get_heart_train_loader(
     return train_gen, valid_gen
 
 def get_pmri_data_loaders(cfg: OmegaConf):
-    data = get_pmri_data(train_set=True, val_set=True, cfg=cfg)
+    data = get_pmri_data(train_set=True, val_set=True, eval_set=False, cfg=cfg)
     train_transform_key = 'all_transforms'
     val_transform_key = 'valid_io_transforms'
     transforms = Transforms()
