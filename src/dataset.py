@@ -55,7 +55,7 @@ class MultisiteMRIProstateDataset(Dataset):
         'I2CVB': ['C', 'siemens'],
         'UCL':   ['D', 'siemens'],
         'BIDMC': ['E', 'ge'],
-        'HK':    ['F', 'siemens']
+        # 'HK':    ['F', 'siemens']
     }
     _DS_CONFIG = {
         'num_classes': 2,
@@ -113,11 +113,21 @@ class MultisiteMRIProstateDataset(Dataset):
             self.input = [self.input[i] for i in cases]
             self.target = [self.target[i] for i in cases]
 
+        # Subset of the already split data
+        if self._split in ['train', 'valid'] and self._subset is True:
+            num_cases = list(range(len(self.input)))
+            split_idx = int(len(num_cases) * 0.3)
+            rng = random.Random(self._seed)
+            rng.shuffle(num_cases)
+            cases = num_cases[:split_idx]
+            self.input = [self.input[i] for i in cases]
+            self.target = [self.target[i] for i in cases]
+
         # Concat around last axis (all single slices)
         self.input = np.concatenate(self.input, axis=-1)
-        self.input = np.expand_dims(self.input, axis=0) # self.input = self.input.unsqueeze(0) # Input final shape after unsqueeze: (1, H, W, Num_slices)
+        self.input = np.expand_dims(self.input, axis=0) # Input final shape after unsqueeze: (1, H, W, Num_slices)
         self.target = np.concatenate(self.target, axis=-1)
-        self.target = np.expand_dims(self.target, axis=0) # self.target = self.target.unsqueeze(0) # Target final shape after unsqueeze: (1, H, W, Num_slices)
+        self.target = np.expand_dims(self.target, axis=0) # Target final shape after unsqueeze: (1, H, W, Num_slices)
         if self._format == 'torch':
             self.input = torch.from_numpy(self.input)
             self.target = torch.from_numpy(self.target)
