@@ -772,9 +772,10 @@ def get_pmri_data(
         data['val'] = MultisiteMRIProstateDataset(
             datapath=datapath,
             vendor=cfg.unet.prostate.training.vendor,
-            split='valid',
+            split='valid' if cfg.unet.prostate.training.validation is True else 'train',
             load_only_present=cfg.unet.prostate.training.load_only_present,
-            format=cfg.format
+            format=cfg.format,
+            subset=cfg.unet.prostate.training.subset
         )
     if eval_set:
         print(f'Loading evaluation PMRI dataset for vendor {cfg.unet.prostate.training.vendor} ...')
@@ -1313,16 +1314,17 @@ def get_heart_train_loader(
 
 def get_pmri_data_loaders(cfg: OmegaConf):
     data = get_pmri_data(train_set=True, val_set=True, eval_set=False, cfg=cfg)
-    train_transform_key = 'all_transforms'
+    assert 'train' in data and 'val' in data, 'Training and validation sets are required'
+    model_cfg = cfg.unet.prostate
+    train_transform_key = 'all_transforms' if model_cfg.training.augment is True else 'valid_io_transforms'
     val_transform_key = 'valid_io_transforms'
     transforms = Transforms()
-    model_cfg = cfg.unet.prostate
     train_loader = MultiImageSingleViewDataLoader(
         data=data['train'],
         batch_size=model_cfg.training.batch_size,
         return_orig=False,
         permute=True
-    )    
+    )
     val_loader = MultiImageSingleViewDataLoader(
         data=data['val'],
         batch_size=model_cfg.training.batch_size,
