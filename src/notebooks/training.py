@@ -3,7 +3,7 @@ import sys
 from omegaconf import OmegaConf
 import wandb
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 sys.path.append('../')
 
 from model.unet import get_unet
@@ -12,18 +12,25 @@ from trainer.unet_trainer import get_unet_trainer
 
 ### Load basic config
 DATA_KEY = 'prostate'
-ITERATION = 1
+ITERATION = 0
+AUGMENT = False
+SUBSET = True
+VALIDATION = False
 cfg = OmegaConf.load('../configs/conf.yaml')
 OmegaConf.update(cfg, 'run.iteration', ITERATION)
 OmegaConf.update(cfg, 'run.data_key', DATA_KEY)
 
 unet_name = 'monai-64-4-4'
-extra_description = 'moredata'
+extra_description = '_noaug_overfit'
 cfg.wandb.project = f'{DATA_KEY}_{unet_name}_{ITERATION}{extra_description}'
 args = unet_name.split('-')
 cfg.unet[DATA_KEY].pre = unet_name
 cfg.unet[DATA_KEY].arch = args[0]
 cfg.unet[DATA_KEY].n_filters_init = None if unet_name == 'swinunetr' else int(args[1])
+# The following three are set to try to achieve overfitting
+cfg.unet[DATA_KEY].training.augment = AUGMENT
+cfg.unet[DATA_KEY].training.validation = VALIDATION # Makes validation set be the training one
+cfg.unet[DATA_KEY].training.subset = SUBSET # Subsets validation
 cfg.format = 'torch'
 if args[0] == 'monai':
     cfg.unet[DATA_KEY].depth = int(args[2])
