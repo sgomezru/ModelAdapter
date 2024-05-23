@@ -55,7 +55,7 @@ class MultisiteMRIProstateDataset(Dataset):
         'I2CVB': ['C', 'siemens'],
         'UCL':   ['D', 'siemens'],
         'BIDMC': ['E', 'ge'],
-        # 'HK':    ['F', 'siemens']
+        'HK':    ['F', 'siemens']
     }
     _DS_CONFIG = {
         'num_classes': 2,
