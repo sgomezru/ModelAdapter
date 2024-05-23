@@ -78,9 +78,11 @@ def get_unet(
     if return_state_dict:
         # weight_dir = cfg.unet.weight_dir[0] if isinstance(cfg.unet.weight_dir, tuple) else cfg.unet.weight_dir
         weight_dir = cfg.fs.weight_dir[0] if isinstance(cfg.fs.weight_dir, tuple) else cfg.fs.weight_dir
-        unet_name = f'{cfg.run.data_key}_{unet_cfg.pre}_{cfg.run.iteration}'
+        # unet_name = f'{cfg.run.data_key}_{unet_cfg.pre}_{cfg.run.iteration}'
+        unet_name = f'{cfg.run.data_key}_{unet_cfg.pre}_{cfg.wandb.project}_{cfg.run.iteration}'
         model_path = os.path.join(weight_dir, f'{unet_name}_best.pt')
         state_dict = torch.load(model_path)
+        print(f'Loaded model from epoch {state_dict["epoch"]} and path:\n{model_path}')
         unet.load_state_dict(state_dict['model_state_dict'])
         return unet, state_dict
     else:
