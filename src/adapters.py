@@ -2,9 +2,17 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from sklearn.covariance import LedoitWolf
-from sklearn.decomposition import PCA
+from sklearn.decomposition import IncrementalPCA, PCA
 from copy import deepcopy
 from typing import Tuple, Callable
+
+# Possible layers
+# Probably bottleneck on encoder
+# model.1.submodule.1.submodule.1.submodule.0.conv.unit3.conv
+# model.1.submodule.1.submodule.1.submodule.0.conv.unit
+# Probably bottleneck on decoder
+# model.1.submodule.1.submodule.2.0.conv
+# model.1.submodule.1.submodule.2.0
 
 class PoolingMahalanobisDetector(nn.Module):
     def __init__(
@@ -193,7 +201,6 @@ class PoolingMahalanobisDetector(nn.Module):
         return x
 
 
-
 class PoolingMahalanobisWrapper(nn.Module):
     def __init__(
         self,
@@ -275,19 +282,27 @@ class PoolingMahalanobisWrapper(nn.Module):
             return self.model(x).detach().cpu()
 
 class PCA_Adapter(nn.Module):
-    def __init__(self, swivel, n_dims, device='cuda:0'):
+    def __init__(self, swivel, n_dims, batch_size, device='cuda:0'):
         super().__init__()
         self.swivel = swivel
         self.n_dims = n_dims
-        self.pca = PCA(self.n_dims)
+        self.bs = batch_size
+        # self.pca = PCA(n_components=self.n_dims)
+        self.pca = IncrementalPCA(n_components=self.n_dims, batch_size=self.bs)
         self.device = device
-        self.training = False
+        self.training = True
         self.activations = []
 
     def forward(self, x):
-        if self.training:
-            ...
-        return x
+        # X must be of shape (n_samples, n_features), thus flattened, and comes as a torch tensor
+        x = x.view(x.size(0), -1)
+        x = x.cpu().detach().numpy()
+        # if self.training:
+        self.pca.partial_fit(x)
+        # else:
+        #     x = self.pca.transform(x)
+        #     # TODO: Transform to torch again
+        #     return x
 
     def _collect(self, x):
         # Collect activations, probably assert x type and shape
@@ -308,9 +323,10 @@ class PCA_Adapter(nn.Module):
 class PCAModuleWrapper(nn.Module):
     def __init__(self, model, adapters, copy=True):
         super().__init__()
-        self.module = deepcopy(model) if copy else model
+        self.model = deepcopy(model) if copy else model
         self.adapters = adapters
         self.adapter_handles = {}
+        self.model.eval()
 
     def hook_adapters(self):
         for adapter in self.adapters:
@@ -321,10 +337,8 @@ class PCAModuleWrapper(nn.Module):
 
     def _get_hook( self, adapter):
         def hook_fn( module: nn.Module, x: Tuple[Tensor]) -> Tensor:
-            # x, *_ = x # tuple, alternatively use x_in = x[0]
-            # x = adapter(x)
-            return adapter(x[0])
-        
+            adapter(x[0])
+            # return adapter(x)
         return hook_fn
 
     def fit(self):
@@ -332,10 +346,4 @@ class PCAModuleWrapper(nn.Module):
             adapter.fit()
 
     def forward(self, x):
-        if self.training:
-            return out
-            pass
-        else:
-            return self.model(x).detach().cpu()
-            pass
-
+        return self.model(x)

@@ -102,7 +102,6 @@ def get_unet_prostate_trainer(
     n_epochs = model_cfg.training.epochs
     patience = model_cfg.training.patience
     log = cfg.wandb.log
-    # criterion = TrainLossPMRI()
     criterion = DiceCELoss(softmax=True, to_onehot_y=True)
 
     return UNetTrainerPMRI(
@@ -1270,3 +1269,4 @@ class UNetTrainerPMRI():
         self.training_time = time.time() - self.training_time
         self.save_hist()
         self.load_model()
+        print(f'Total training time (min): {self.training_time / 60.}')
