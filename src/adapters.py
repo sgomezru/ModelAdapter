@@ -296,7 +296,7 @@ class PCA_Adapter(nn.Module):
     def forward(self, x):
         # X must be of shape (n_samples, n_features), thus flattened, and comes as a torch tensor
         x = x.view(x.size(0), -1)
-        x = x.cpu().detach().numpy()
+        x = x.detach().numpy().cpu()
         # if self.training:
         self.pca.partial_fit(x)
         # else:
