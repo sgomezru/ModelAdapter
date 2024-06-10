@@ -25,7 +25,7 @@ OmegaConf.update(cfg, 'run.iteration', ITERATION)
 OmegaConf.update(cfg, 'run.data_key', DATA_KEY)
 
 unet_name = 'monai-64-4-4'
-extra_description = '_test_adapted'
+extra_description = '_ipca_adapted'
 cfg.wandb.project = f'{DATA_KEY}_{unet_name}_{ITERATION}{extra_description}'
 args = unet_name.split('-')
 cfg.unet[DATA_KEY].pre = unet_name

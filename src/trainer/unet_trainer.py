@@ -1018,13 +1018,11 @@ class UNetTrainerPMRI():
         self.es           = EarlyStopping(mode=self.es_mode, patience=2*self.patience)
         self.scaler       = GradScaler()
         self.history      = {'train loss': [], 'valid loss' : []}
+        self.training_time = 0
         if self.eval_metrics is not None:
             self.history = {**self.history, **{key: [] for key in self.eval_metrics.keys()}}
-            
         if self.log:
             wandb.watch(self.model)
-            
-        self.training_time = 0
         
     def inference_step(self, x):
         return self.model(x.to(self.device))
