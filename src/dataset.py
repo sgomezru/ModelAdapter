@@ -76,6 +76,15 @@ class MultisiteMRIProstateDataset(Dataset):
         self._transform = transform
         self._load_data()
 
+    def _split_subset(self, split_pct=0.8, larger_split='train'):
+        num_cases = list(range(len(self.input)))
+        split_idx = int(len(num_cases) * split_pct)
+        rng = random.Random(self._seed)
+        rng.shuffle(num_cases)
+        cases = num_cases[:split_idx] if self._split == larger_split else num_cases[split_idx:]
+        self.input = [self.input[i] for i in cases]
+        self.target = [self.target[i] for i in cases]
+
     def _load_data(self):
         self.input = []
         self.target = []
@@ -104,24 +113,16 @@ class MultisiteMRIProstateDataset(Dataset):
                     self.input.append(x)
                     self.target.append(y)
         # Split here
-        if (self._split in ['train', 'valid']) or (self._split == 'eval' and self._subset is True):
-            num_cases = list(range(len(self.input)))
-            split_idx = int(len(num_cases) * 0.8)
-            rng = random.Random(self._seed)
-            rng.shuffle(num_cases)
-            cases = num_cases[:split_idx] if self._split == 'train' else num_cases[split_idx:]
-            self.input = [self.input[i] for i in cases]
-            self.target = [self.target[i] for i in cases]
+        if self._split in ['train', 'valid']:
+            self._split_subset(split_pct=0.8, larger_split='train')
+            # Subset of the already split data
+            if self._subset is True:
+                self._split_subset(split_pct=0.3, larger_split=self._split)
 
-        # Subset of the already split data
-        if self._split in ['train', 'valid'] and self._subset is True:
-            num_cases = list(range(len(self.input)))
-            split_idx = int(len(num_cases) * 0.3)
-            rng = random.Random(self._seed)
-            rng.shuffle(num_cases)
-            cases = num_cases[:split_idx]
-            self.input = [self.input[i] for i in cases]
-            self.target = [self.target[i] for i in cases]
+        # Subset not a bool this time, just for the eval
+        if self._split == 'eval' and isinstance(self._subset, str):
+            larger_split = self._split if self._subset == 'training' else '_'
+            self._split_subset(split_pct=0.8, larger_split=larger_split)
 
         # Concat around last axis (all single slices)
         self.input = np.concatenate(self.input, axis=-1)
