@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import numpy as np
+import pickle
 from torch import Tensor
 from sklearn.covariance import LedoitWolf
 from sklearn.decomposition import IncrementalPCA, PCA
@@ -282,43 +284,57 @@ class PoolingMahalanobisWrapper(nn.Module):
             return self.model(x).detach().cpu()
 
 class PCA_Adapter(nn.Module):
-    def __init__(self, swivel, n_dims, batch_size, device='cuda:0'):
+    def __init__(self, swivel, n_dims, batch_size, training=False, name='', device='cuda:0'):
         super().__init__()
         self.swivel = swivel
         self.n_dims = n_dims
         self.bs = batch_size
         # self.pca = PCA(n_components=self.n_dims)
-        self.pca = IncrementalPCA(n_components=self.n_dims, batch_size=self.bs)
         self.device = device
-        self.training = True
+        self.training = training
+        self.project = name
+        self.pca_path = f'/workspace/src/out/pca/{name}'
         self.activations = []
+        self._set_pca()
+
+    def _set_pca(self):
+        if self.training is True:
+            print('Instantiated new IPCA')
+            self.pca = IncrementalPCA(n_components=self.n_dims, batch_size=self.bs)
+        else:
+            print('Loading trained IPCA')
+            self.pca_path += f'_{self.swivel.replace(".", "_")}'
+            self.pca_path += f'_{self.n_dims}dim.pkl'
+            print(f'Loading path{self.pca_path}')
+            with open(self.pca_path, 'rb') as f:
+                self.pca = pickle.load(f)
 
     def forward(self, x):
         # X must be of shape (n_samples, n_features), thus flattened, and comes as a torch tensor
+        print(f'self_training is: {self.training}')
         x = x.view(x.size(0), -1)
-        x = x.detach().cpu().numpy()
-        # if self.training:
-        self.pca.partial_fit(x)
-        # else:
-        #     x = self.pca.transform(x)
-        #     # TODO: Transform to torch again
-        #     return x
+        x_np = x.detach().cpu().numpy()
+        if self.training is True:
+            print('Inside partial fit IPCA')
+            self.pca.partial_fit(x_np)
+        elif self.training is False:
+            print('Computing activations only')
+            x_np = self.pca.transform(x_np)
+            self.activations.append(x_np)
 
     def _collect(self, x):
         # Collect activations, probably assert x type and shape
         ...
 
-    def _merge(self):
+    def _merge_save(self):
         # Probably concat activations
-        ...
+        print('Saving activations...')
+        save_path = f'/workspace/src/out/activations/{self.project}_{self.swivel.replace(".", "_")}_activations_{self.n_dims}dims.npy'
+        np.save(save_path, np.vstack(self.activations))
 
     def dim_reduce(self, x):
         # Probably assert x shape and type
         return self.pca.transform(x)
-
-    def fit(self):
-        self.pca.fit()
-        ...
 
 class PCAModuleWrapper(nn.Module):
     def __init__(self, model, adapters, copy=True):
@@ -340,10 +356,6 @@ class PCAModuleWrapper(nn.Module):
             adapter(x[0])
             # return adapter(x)
         return hook_fn
-
-    def fit(self):
-        for adapter in self.adapters:
-            adapter.fit()
 
     def forward(self, x):
         return self.model(x)

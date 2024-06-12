@@ -16,6 +16,9 @@ from trainer.unet_trainer import get_unet_trainer
 from adapters import PCA_Adapter, PCAModuleWrapper
 from torch.utils.data import DataLoader
 
+possible_modes = ['train_adapters', 'get_activations']
+mode = possible_modes[1]
+
 ### Load basic config
 DATA_KEY = 'prostate'
 ITERATION = 1
@@ -72,39 +75,68 @@ else:
     print(f'Length of non-aug dataset: {len(dataset)}')
 
 try:
+    print(f'Running on mode: {mode}')
     for n_dims in N_DIMS:
         cfg.unet[DATA_KEY].training.batch_size = 58 if n_dims <= 58 else n_dims
-        adapters = [PCA_Adapter(swivel, n_dims, cfg.unet[DATA_KEY].training.batch_size) for swivel in layer_names]
-        for adapter in adapters:
-            adapter.training = True
+        training = None
+
+        if mode == 'train_adapters':
+            training = True
+            name = ''
+        elif mode == 'get_activations':
+            training = False
+            name = cfg.wandb.project
+
+        adapters = [PCA_Adapter(swivel, n_dims, cfg.unet[DATA_KEY].training.batch_size, training, name) for swivel in layer_names]
+
         adapters = nn.ModuleList(adapters)
         unet, state_dict = get_unet(cfg, update_cfg_with_swivels=False, return_state_dict=True)
         unet_adapted = PCAModuleWrapper(model=unet, adapters=adapters)
         unet_adapted.hook_adapters()
         unet_adapted.to(device);
+
+        for adapter in unet_adapted.adapters:
+            print(adapter.training)
+
         if AUGMENT:
-            print(f'Training for PCA with {n_dims} dims on augmented data')
             pmri_trainer = get_unet_trainer(cfg=cfg, train_loader=train_loader, val_loader=val_loader, model=unet_adapted)
-            pmri_trainer.fit_adapter()
+            if mode == 'train_adapters':
+                print(f'Training for PCA with {n_dims} dims on augmented data')
+                pmri_trainer.fit_adapter()
+            elif mode == 'get_activations':
+                print(f'Getting activations for adapter with {n_dims} on augmented data')
         else:
-            print(f'Training for PCA with {n_dims} dims on non-augmented data')
             unet_adapted.eval()
             dataloader = DataLoader(dataset,
                                     batch_size=cfg.unet[DATA_KEY].training.batch_size,
                                     shuffle=False, drop_last=False)
 
-            for i, batch in enumerate(tqdm(dataloader)):
-                input_ = batch['input'].to(device)
-                if input_.size(0) < n_dims:
-                    print(f'Skipped because batch size smaller than n_components')
-                    continue
-                unet_adapted(input_)
+            if mode == 'train_adapters':
+                print(f'Training for PCA with {n_dims} dims on non-augmented data')
+                for i, batch in enumerate(tqdm(dataloader)):
+                    input_ = batch['input'].to(device)
+                    if input_.size(0) < n_dims:
+                        print(f'Skipped because batch size smaller than n_components')
+                        continue
+                    unet_adapted(input_)
 
-        for adapter in unet_adapted.adapters:
-            name = adapter.swivel.replace('.', '_')
-            if AUGMENT: name += '_aug'
-            with open(f'/workspace/src/out/pca/{cfg.wandb.project}_{name}_{n_dims}dim.pkl',  'wb') as f:
-                pickle.dump(adapter.pca, f)
+            elif mode == 'get_activations':
+                for i, batch in enumerate(tqdm(dataloader)):
+                    input_ = batch['input'].to(device)
+                    # TODO: Code here somewhere to save activations
+                    unet_adapted(input_)
+
+        if mode == 'train_adapters':
+            for adapter in unet_adapted.adapters:
+                name = adapter.swivel.replace('.', '_')
+                if AUGMENT: name += '_aug'
+                with open(f'/workspace/src/out/pca/{cfg.wandb.project}_{name}_{n_dims}dim.pkl',  'wb') as f:
+                    pickle.dump(adapter.pca, f)
+
+        elif mode == 'get_activations':
+            for adapter in unet_adapted.adapters:
+                adapter._merge_save()
+
 finally:
     if LOG:
         wandb.finish()
