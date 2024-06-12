@@ -24,7 +24,7 @@ AUGMENT = False
 LOAD_ONLY_PRESENT = True
 SUBSET = 'training' # Whether the validation is a subset or the whole set, normally bool, but for eval must be string 'training'
 VALIDATION = True # If false makes validation set be the training one
-N_DIMS = [4, 8, 16, 32, 64, 128, 256, 512]
+N_DIMS = [2, 4, 8, 16, 32, 64]
 cfg = OmegaConf.load('../configs/conf.yaml')
 OmegaConf.update(cfg, 'run.iteration', ITERATION)
 OmegaConf.update(cfg, 'run.data_key', DATA_KEY)
@@ -40,7 +40,6 @@ cfg.unet[DATA_KEY].training.augment = AUGMENT
 cfg.unet[DATA_KEY].training.validation = VALIDATION
 cfg.unet[DATA_KEY].training.subset = SUBSET
 cfg.unet[DATA_KEY].training.load_only_present = LOAD_ONLY_PRESENT
-# cfg.unet[DATA_KEY].training.batch_size = 32
 
 if args[0] == 'monai':
     cfg.unet[DATA_KEY].depth = int(args[2])
@@ -55,14 +54,6 @@ if LOG:
             "dataset": DATA_KEY
         }
     )
-
-# Possible layers
-# Probably bottleneck on encoder
-# model.1.submodule.1.submodule.1.submodule.0.conv.unit3.conv
-# model.1.submodule.1.submodule.1.submodule.0.conv.unit
-# Probably bottleneck on decoder
-# model.1.submodule.1.submodule.2.0.conv
-# model.1.submodule.1.submodule.2.0
 
 layer_names = [
     'model.1.submodule.1.submodule.1.submodule.0.conv.unit3.conv',
@@ -82,9 +73,8 @@ else:
 
 try:
     for n_dims in N_DIMS:
-        # bs = cfg.unet[DATA_KEY].training.batch_size if n_dims <= 32 else n_dims
-        bs = 58 if n_dims <= 58 else n_dims
-        adapters = [PCA_Adapter(swivel, n_dims, bs) for swivel in layer_names]
+        cfg.unet[DATA_KEY].training.batch_size = 58 if n_dims <= 58 else n_dims
+        adapters = [PCA_Adapter(swivel, n_dims, cfg.unet[DATA_KEY].training.batch_size) for swivel in layer_names]
         for adapter in adapters:
             adapter.training = True
         adapters = nn.ModuleList(adapters)
