@@ -17,7 +17,7 @@ from adapters import PCA_Adapter, PCAModuleWrapper
 from torch.utils.data import DataLoader
 
 possible_modes = ['train_adapters', 'get_activations']
-mode = possible_modes[1]
+mode = possible_modes[0]
 
 ### Load basic config
 DATA_KEY = 'prostate'
@@ -121,9 +121,9 @@ try:
                     unet_adapted(input_)
 
             elif mode == 'get_activations':
+                print(f'Getting activations for adapter with {n_dims} on non-augmented data')
                 for i, batch in enumerate(tqdm(dataloader)):
                     input_ = batch['input'].to(device)
-                    # TODO: Code here somewhere to save activations
                     unet_adapted(input_)
 
         if mode == 'train_adapters':
