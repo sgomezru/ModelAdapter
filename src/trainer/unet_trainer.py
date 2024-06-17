@@ -1278,3 +1278,5 @@ class UNetTrainerPMRI():
                 batch = next(self.train_loader)
                 input_ = batch['data'].float()
                 self.inference_step(input_)
+        self.training_time = time.time() - self.training_time
+        print(f'Total training time (min): {self.training_time / 60.}')

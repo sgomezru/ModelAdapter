@@ -58,7 +58,7 @@ if LOG:
         }
     )
 
-layer_names = ['model.1.submodule.1.submodule.2.0.conv', 'model.1.submodule.2.0.conv', 'model.2.0.conv']
+layer_names = ['model.0.conv', 'model.1.submodule.0.conv', 'model.1.submodule.1.submodule.0.conv', 'model.1.submodule.1.submodule.1.submodule.0.conv']
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
