@@ -219,7 +219,6 @@ class PoolingMahalanobisWrapper(nn.Module):
         self.transform       = True
         self.model.eval()
 
-
     def hook_adapters(
         self,
     ) -> None:
@@ -230,7 +229,6 @@ class PoolingMahalanobisWrapper(nn.Module):
             self.adapter_handles[
                 swivel
             ] = layer.register_forward_pre_hook(hook)
-
 
     def _get_hook(
         self,
@@ -245,28 +243,23 @@ class PoolingMahalanobisWrapper(nn.Module):
             return adapter(x[0])
         
         return hook_fn
-    
 
     def fit(self):
         for adapter in self.adapters:
             adapter.fit()
-
 
     def set_transform(self, transform: bool):
         self.transform = transform
         for adapter in self.adapters:
             adapter.transform = transform
 
-
     def set_lr(self, lr: float):
         for adapter in self.adapters:
             adapter.lr = lr
 
-
     def turn_off_all_adapters(self):
         for adapter in self.adapters:
             adapter.off()
-
 
     def forward(
         self, 
@@ -284,14 +277,14 @@ class PoolingMahalanobisWrapper(nn.Module):
             return self.model(x).detach().cpu()
 
 class PCA_Adapter(nn.Module):
-    def __init__(self, swivel, n_dims, batch_size, training=False, name='', device='cuda:0'):
+    def __init__(self, swivel, n_dims, batch_size, pre_fit=False, name='', device='cuda:0'):
         super().__init__()
         self.swivel = swivel
         self.n_dims = n_dims
         self.bs = batch_size
         # self.pca = PCA(n_components=self.n_dims)
         self.device = device
-        self.training = training
+        self.pre_fit = pre_fit
         self.project = name
         self.pca_path = f'/workspace/src/out/pca/{name}'
         self.activations = []
@@ -311,15 +304,12 @@ class PCA_Adapter(nn.Module):
 
     def forward(self, x):
         # X must be of shape (n_samples, n_features), thus flattened, and comes as a torch tensor
-        print(f'self_training is: {self.training}')
         x = x.view(x.size(0), -1)
         x_np = x.detach().cpu().numpy()
-        if self.training is True:
-            print('Inside partial fit IPCA')
+        if self.pre_fit is False:
             self.pca.partial_fit(x_np)
-        elif self.training is False:
-            print('Computing activations only')
-            x_np = self.pca.transform(x_np)
+        elif self.pre_fit is True:
+            x_np = self.dim_reduce(x_np)
             self.activations.append(x_np)
 
     def _collect(self, x):

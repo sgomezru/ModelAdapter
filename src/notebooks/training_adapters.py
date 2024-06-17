@@ -58,10 +58,7 @@ if LOG:
         }
     )
 
-layer_names = [
-    'model.1.submodule.1.submodule.1.submodule.0.conv.unit3.conv',
-    'model.1.submodule.1.submodule.2.0.conv'
-]
+layer_names = ['model.1.submodule.1.submodule.2.0.conv', 'model.1.submodule.2.0.conv', 'model.2.0.conv']
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -76,27 +73,24 @@ else:
 
 try:
     print(f'Running on mode: {mode}')
-    for n_dims in N_DIMS:
+    for n_dims in N_DIMS[::-1]:
         cfg.unet[DATA_KEY].training.batch_size = 58 if n_dims <= 58 else n_dims
-        training = None
+        pre_fit = None
 
         if mode == 'train_adapters':
-            training = True
+            pre_fit = False
             name = ''
         elif mode == 'get_activations':
-            training = False
+            pre_fit = True
             name = cfg.wandb.project
 
-        adapters = [PCA_Adapter(swivel, n_dims, cfg.unet[DATA_KEY].training.batch_size, training, name) for swivel in layer_names]
+        adapters = [PCA_Adapter(swivel, n_dims, cfg.unet[DATA_KEY].training.batch_size, pre_fit, name) for swivel in layer_names]
 
         adapters = nn.ModuleList(adapters)
         unet, state_dict = get_unet(cfg, update_cfg_with_swivels=False, return_state_dict=True)
         unet_adapted = PCAModuleWrapper(model=unet, adapters=adapters)
         unet_adapted.hook_adapters()
         unet_adapted.to(device);
-
-        for adapter in unet_adapted.adapters:
-            print(adapter.training)
 
         if AUGMENT:
             pmri_trainer = get_unet_trainer(cfg=cfg, train_loader=train_loader, val_loader=val_loader, model=unet_adapted)

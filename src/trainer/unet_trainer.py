@@ -1268,3 +1268,13 @@ class UNetTrainerPMRI():
         self.save_hist()
         self.load_model()
         print(f'Total training time (min): {self.training_time / 60.}')
+
+    def fit_adapter(self):
+        progress_bar = tqdm(range(self.num_batches_per_epoch), total=self.num_batches_per_epoch, position=0, leave=True)
+        self.model.eval()
+        self.training_time = time.time()
+        with torch.no_grad():
+            for it in progress_bar:
+                batch = next(self.train_loader)
+                input_ = batch['data'].float()
+                self.inference_step(input_)
