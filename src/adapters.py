@@ -291,7 +291,7 @@ class PCA_Adapter(nn.Module):
         self._set_pca()
 
     def _set_pca(self):
-        if self.training is True:
+        if self.pre_fit is False:
             print('Instantiated new IPCA')
             self.pca = IncrementalPCA(n_components=self.n_dims, batch_size=self.bs)
         else:
