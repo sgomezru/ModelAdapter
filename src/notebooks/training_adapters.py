@@ -17,7 +17,7 @@ from adapters import PCA_Adapter, PCAModuleWrapper
 from torch.utils.data import DataLoader
 
 possible_modes = ['train_adapters', 'get_activations']
-mode = possible_modes[0]
+mode = possible_modes[1]
 
 ### Load basic config
 DATA_KEY = 'prostate'
@@ -58,7 +58,10 @@ if LOG:
         }
     )
 
-layer_names = ['model.0.conv', 'model.1.submodule.0.conv', 'model.1.submodule.1.submodule.0.conv', 'model.1.submodule.1.submodule.1.submodule.0.conv']
+layer_names = ['model.0.conv',
+               'model.1.submodule.0.conv',
+               'model.1.submodule.1.submodule.0.conv',
+               'model.1.submodule.1.submodule.1.submodule.0.conv']
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -74,17 +77,20 @@ else:
 try:
     print(f'Running on mode: {mode}')
     for n_dims in N_DIMS[::-1]:
-        cfg.unet[DATA_KEY].training.batch_size = 58 if n_dims <= 58 else n_dims
-        pre_fit = None
+        cfg.unet[DATA_KEY].training.batch_size = 58 if (n_dims <= 58 or mode == 'get_activations') else n_dims
+        pre_fit, train_gaussian = None
 
         if mode == 'train_adapters':
             pre_fit = False
             name = ''
+            train_gaussian = False
         elif mode == 'get_activations':
             pre_fit = True
             name = cfg.wandb.project
+            train_gaussian = True
 
-        adapters = [PCA_Adapter(swivel, n_dims, cfg.unet[DATA_KEY].training.batch_size, pre_fit, name) for swivel in layer_names]
+        adapters = [PCA_Adapter(swivel, n_dims, cfg.unet[DATA_KEY].training.batch_size,
+                                pre_fit, train_gaussian, name=name) for swivel in layer_names]
 
         adapters = nn.ModuleList(adapters)
         unet, state_dict = get_unet(cfg, update_cfg_with_swivels=False, return_state_dict=True)
@@ -129,7 +135,7 @@ try:
 
         elif mode == 'get_activations':
             for adapter in unet_adapted.adapters:
-                adapter._merge_save()
+                adapter._save_activations_np()
 
 finally:
     if LOG:

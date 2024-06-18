@@ -277,30 +277,77 @@ class PoolingMahalanobisWrapper(nn.Module):
             return self.model(x).detach().cpu()
 
 class PCA_Adapter(nn.Module):
-    def __init__(self, swivel, n_dims, batch_size, pre_fit=False, name='', device='cuda:0'):
+    def __init__(self, swivel, n_dims, batch_size, pre_fit=False,
+                 train_gaussian=False, compute_dist=False, name='',
+                 device='cuda:0'):
         super().__init__()
         self.swivel = swivel
         self.n_dims = n_dims
         self.bs = batch_size
-        # self.pca = PCA(n_components=self.n_dims)
         self.device = device
         self.pre_fit = pre_fit
+        self.train_gaussian = train_gaussian
+        self.compute_dist = compute_dist
         self.project = name
         self.pca_path = f'/workspace/src/out/pca/{name}'
-        self.activations = []
-        self._set_pca()
+        self._init()
 
-    def _set_pca(self):
+    def _init(self):
+
+        self.mu = None
+        self.inv_cov = None
+        self.activations = []
+        self.distances = []
+
         if self.pre_fit is False:
-            print('Instantiated new IPCA')
             self.pca = IncrementalPCA(n_components=self.n_dims, batch_size=self.bs)
-        else:
-            print('Loading trained IPCA')
+            print('Instantiated new IPCA')
+        elif self.pre_fit is True:
             self.pca_path += f'_{self.swivel.replace(".", "_")}'
             self.pca_path += f'_{self.n_dims}dim.pkl'
-            print(f'Loading path{self.pca_path}')
-            with open(self.pca_path, 'rb') as f:
-                self.pca = pickle.load(f)
+            try:
+                with open(self.pca_path, 'rb') as f:
+                    self.pca = pickle.load(f)
+                print(f'Loaded IPCA from path{self.pca_path}')
+            except Exception as e:
+                print(f'Unable to load IPCA, error: {e}')
+            if self.train_gaussian is False:
+                self._load_act()
+
+    def _load_act(self):
+        try:
+            path = f'/workspace/src/out/activations/{self.project}_{self.swivel.replace(".", "_")}_activations_{self.n_dims}dims.npy'
+            self.activations = np.load(path)
+            print(f'Loaded activations from path {path}')
+            self._set_gaussian()
+        except Exception as e:
+            print(f'No previously saved activations found {e}')
+
+    @torch.no_grad()
+    def _mahal(self, x):
+        assert (self.mu is not None and self.inv_cov is not None), "Mean and inverse cov matrix required"
+        # x is numpy array of shape (n_samples, n_dims)
+        x = torch.tensor(x).to(self.device)
+        print(x.shape, self.mu.shape, self.inv_cov.shape)
+        x_centered = x - self.mu
+        mahal_dist = x_centered @ self.inv_cov @ x_centered.permute(0, 2, 1)
+        self.distances.append(mahal_dist)
+
+    def _clean_activations(self):
+        self.activations = []
+        print('Emptied collected activations of adapter')
+
+    def _set_gaussian(self):
+        if isinstance(self.activations, list): self.activations = np.vstack(self.activations)
+        self.mu = torch.tensor(np.mean(self.activations, axis=0)).unsqueeze(0).to(self.device)
+        self.inv_cov = torch.tensor(np.linalg.inv(np.cov(self.activations, rowvar=False))).unsqueeze(0).to(self.device)
+        print('Mean and inverse covariance matrix computed and set')
+        self._clean_activations()
+
+    def _save_activations_np(self):
+        print('Saving activations...')
+        save_path = f'/workspace/src/out/activations/{self.project}_{self.swivel.replace(".", "_")}_activations_{self.n_dims}dims.npy'
+        np.save(save_path, np.vstack(self.activations))
 
     def forward(self, x):
         # X must be of shape (n_samples, n_features), thus flattened, and comes as a torch tensor
@@ -310,20 +357,10 @@ class PCA_Adapter(nn.Module):
             self.pca.partial_fit(x_np)
         elif self.pre_fit is True:
             x_np = self.dim_reduce(x_np)
-            self.activations.append(x_np)
-
-    def _collect(self, x):
-        # Collect activations, probably assert x type and shape
-        ...
-
-    def _merge_save(self):
-        # Probably concat activations
-        print('Saving activations...')
-        save_path = f'/workspace/src/out/activations/{self.project}_{self.swivel.replace(".", "_")}_activations_{self.n_dims}dims.npy'
-        np.save(save_path, np.vstack(self.activations))
+            if self.train_gaussian is True: self.activations.append(x_np)
+            if self.compute_dist is True: self._mahal(x_np)
 
     def dim_reduce(self, x):
-        # Probably assert x shape and type
         return self.pca.transform(x)
 
 class PCAModuleWrapper(nn.Module):
