@@ -278,14 +278,15 @@ class PoolingMahalanobisWrapper(nn.Module):
 
 class PCA_Adapter(nn.Module):
     def __init__(self, swivel, n_dims, batch_size, pre_fit=False,
-                 train_gaussian=False, compute_dist=False, name='',
-                 device='cuda:0'):
+                 train_gaussian=False, compute_dist=False,
+                 reduce_dims=True, name='', device='cuda:0'):
         super().__init__()
         self.swivel = swivel
         self.n_dims = n_dims
         self.bs = batch_size
         self.device = device
         self.pre_fit = pre_fit
+        self.reduce_dims = reduce_dims
         self.train_gaussian = train_gaussian
         self.compute_dist = compute_dist
         self.project = name
@@ -324,14 +325,15 @@ class PCA_Adapter(nn.Module):
             print(f'No previously saved activations found {e}')
 
     @torch.no_grad()
-    def _mahal(self, x):
+    def _mahalanobis_dist(self, x):
         assert (self.mu is not None and self.inv_cov is not None), "Mean and inverse cov matrix required"
-        # x is numpy array of shape (n_samples, n_dims)
+        # x: (n_samples, n_dims)
+        # mu: (1, n_dims)
+        # inv_cov: (n_dims, n_dims)
         x = torch.tensor(x).to(self.device)
-        print(x.shape, self.mu.shape, self.inv_cov.shape)
         x_centered = x - self.mu
-        mahal_dist = x_centered @ self.inv_cov @ x_centered.permute(0, 2, 1)
-        self.distances.append(mahal_dist)
+        mahal_dist = (x_centered @ self.inv_cov * x_centered).sum(dim=1).sqrt()
+        self.distances.append(mahal_dist.detach().cpu())
 
     def _clean_activations(self):
         self.activations = []
@@ -340,7 +342,7 @@ class PCA_Adapter(nn.Module):
     def _set_gaussian(self):
         if isinstance(self.activations, list): self.activations = np.vstack(self.activations)
         self.mu = torch.tensor(np.mean(self.activations, axis=0)).unsqueeze(0).to(self.device)
-        self.inv_cov = torch.tensor(np.linalg.inv(np.cov(self.activations, rowvar=False))).unsqueeze(0).to(self.device)
+        self.inv_cov = torch.tensor(np.linalg.inv(np.cov(self.activations, rowvar=False))).to(self.device)
         print('Mean and inverse covariance matrix computed and set')
         self._clean_activations()
 
@@ -356,9 +358,9 @@ class PCA_Adapter(nn.Module):
         if self.pre_fit is False:
             self.pca.partial_fit(x_np)
         elif self.pre_fit is True:
-            x_np = self.dim_reduce(x_np)
+            if self.reduce_dims is True: x_np = self.dim_reduce(x_np)
             if self.train_gaussian is True: self.activations.append(x_np)
-            if self.compute_dist is True: self._mahal(x_np)
+            if self.compute_dist is True: self._mahalanobis_dist(x_np)
 
     def dim_reduce(self, x):
         return self.pca.transform(x)
