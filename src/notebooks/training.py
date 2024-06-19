@@ -3,7 +3,7 @@ import sys
 from omegaconf import OmegaConf
 import wandb
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 sys.path.append('../')
 
 from model.unet import get_unet
@@ -16,18 +16,20 @@ ITERATION = 0
 AUGMENT = True
 SUBSET = False # Whether the validation is a subset or the whole set
 VALIDATION = True # If false makes validation set be the training one
+EXTRA_DESCRIPTION = '_base'
+LOAD_ONLY_PRESENT = True
 cfg = OmegaConf.load('../configs/conf.yaml')
 OmegaConf.update(cfg, 'run.iteration', ITERATION)
 OmegaConf.update(cfg, 'run.data_key', DATA_KEY)
 
 unet_name = 'monai-64-4-4'
-extra_description = '_test_training'
-cfg.wandb.project = f'{DATA_KEY}_{unet_name}_{ITERATION}{extra_description}'
+cfg.wandb.project = f'{DATA_KEY}_{unet_name}_{ITERATION}{EXTRA_DESCRIPTION}'
 args = unet_name.split('-')
 cfg.unet[DATA_KEY].pre = unet_name
 cfg.unet[DATA_KEY].arch = args[0]
 cfg.unet[DATA_KEY].n_filters_init = None if unet_name == 'swinunetr' else int(args[1])
 cfg.unet[DATA_KEY].training.augment = AUGMENT
+cfg.unet[DATA_KEY].training.load_only_present = LOAD_ONLY_PRESENT
 cfg.unet[DATA_KEY].training.validation = VALIDATION
 cfg.unet[DATA_KEY].training.subset = SUBSET
 cfg.format = 'torch'
