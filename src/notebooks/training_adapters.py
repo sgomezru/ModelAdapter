@@ -1,6 +1,5 @@
 import os
 import sys
-import wandb
 import pickle
 import torch
 import torch.nn as nn
@@ -11,30 +10,30 @@ sys.path.append('../')
 from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 from model.unet import get_unet
-from data_utils import get_pmri_data_loaders, get_eval_data
+from data_utils import get_eval_data
 from trainer.unet_trainer import get_unet_trainer
 from adapters import PCA_Adapter, PCAModuleWrapper
 from torch.utils.data import DataLoader
 
-possible_modes = ['train_adapters', 'get_activations']
-mode = possible_modes[1]
-
 ### Load basic config
 DATA_KEY = 'prostate'
-ITERATION = 1
+ITERATION = 0
 LOG = False
 AUGMENT = False
 LOAD_ONLY_PRESENT = True
 SUBSET = 'training' # Whether the validation is a subset or the whole set, normally bool, but for eval must be string 'training'
 VALIDATION = True # If false makes validation set be the training one
+EXTRA_DESCRIPTION = '_base'
 N_DIMS = [2, 4, 8, 16, 32, 64]
+
 cfg = OmegaConf.load('../configs/conf.yaml')
 OmegaConf.update(cfg, 'run.iteration', ITERATION)
 OmegaConf.update(cfg, 'run.data_key', DATA_KEY)
 
 unet_name = 'monai-64-4-4'
-extra_description = 'moredata'
-cfg.wandb.project = f'{DATA_KEY}_{unet_name}_{ITERATION}{extra_description}'
+cfg.wandb.log = LOG
+cfg.wandb.project = f'{DATA_KEY}_{unet_name}_{ITERATION}{EXTRA_DESCRIPTION}'
+cfg.format = 'numpy' # For eval (Adapter training is model on eval nonetheless)
 args = unet_name.split('-')
 cfg.unet[DATA_KEY].pre = unet_name
 cfg.unet[DATA_KEY].arch = args[0]
@@ -48,46 +47,29 @@ if args[0] == 'monai':
     cfg.unet[DATA_KEY].depth = int(args[2])
     cfg.unet[DATA_KEY].num_res_units = int(args[3])
 
-if LOG:
-    wandb.init(
-        project=cfg.wandb.project,
-        config={
-            "learning_rate": cfg.unet[DATA_KEY].training.lr,
-            "architecture": unet_name,
-            "dataset": DATA_KEY
-        }
-    )
-
 layer_names = ['model.0.conv',
                'model.1.submodule.0.conv',
                'model.1.submodule.1.submodule.0.conv',
                'model.1.submodule.1.submodule.1.submodule.0.conv']
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Loads the Siemens training dataset but in the required format for evaluation (No augmentations & numpy)
+data = get_eval_data(train_set=False, val_set=False, eval_set=True, cfg=cfg)
+dataset = data['eval']
+print(f'Length of dataset: {len(dataset)}')
 
-if AUGMENT:
-    cfg.format = 'torch'
-    train_loader, val_loader = get_pmri_data_loaders(cfg=cfg)
-else:
-    cfg.format = 'numpy'
-    data = get_eval_data(train_set=False, val_set=False, eval_set=True, cfg=cfg)
-    dataset = data['eval']
-    print(f'Length of non-aug dataset: {len(dataset)}')
+possible_modes = ['train_adapters', 'get_activations']
 
-try:
+for mode in possible_modes:
     print(f'Running on mode: {mode}')
     for n_dims in N_DIMS[::-1]:
+        # Batch size hard coded based on dataset length and GPU capacity
         cfg.unet[DATA_KEY].training.batch_size = 58 if (n_dims <= 58 or mode == 'get_activations') else n_dims
-        pre_fit, train_gaussian = None
-
+        pre_fit, train_gaussian = None, None
         if mode == 'train_adapters':
-            pre_fit = False
-            name = ''
-            train_gaussian = False
+            pre_fit, train_gaussian, name = False, False, ''
         elif mode == 'get_activations':
-            pre_fit = True
-            name = cfg.wandb.project
-            train_gaussian = True
+            pre_fit, train_gaussian, name = True, True, cfg.wandb.project
 
         adapters = [PCA_Adapter(swivel, n_dims, cfg.unet[DATA_KEY].training.batch_size,
                                 pre_fit, train_gaussian, name=name) for swivel in layer_names]
@@ -97,46 +79,30 @@ try:
         unet_adapted = PCAModuleWrapper(model=unet, adapters=adapters)
         unet_adapted.hook_adapters()
         unet_adapted.to(device);
+        unet_adapted.eval()
 
-        if AUGMENT:
-            pmri_trainer = get_unet_trainer(cfg=cfg, train_loader=train_loader, val_loader=val_loader, model=unet_adapted)
-            if mode == 'train_adapters':
-                print(f'Training for PCA with {n_dims} dims on augmented data')
-                pmri_trainer.fit_adapter()
-            elif mode == 'get_activations':
-                print(f'Getting activations for adapter with {n_dims} on augmented data')
-        else:
-            unet_adapted.eval()
-            dataloader = DataLoader(dataset,
-                                    batch_size=cfg.unet[DATA_KEY].training.batch_size,
-                                    shuffle=False, drop_last=False)
-
-            if mode == 'train_adapters':
-                print(f'Training for PCA with {n_dims} dims on non-augmented data')
-                for i, batch in enumerate(tqdm(dataloader)):
-                    input_ = batch['input'].to(device)
-                    if input_.size(0) < n_dims:
-                        print(f'Skipped because batch size smaller than n_components')
-                        continue
-                    unet_adapted(input_)
-
-            elif mode == 'get_activations':
-                print(f'Getting activations for adapter with {n_dims} on non-augmented data')
-                for i, batch in enumerate(tqdm(dataloader)):
-                    input_ = batch['input'].to(device)
-                    unet_adapted(input_)
+        dataloader = DataLoader(dataset, batch_size=cfg.unet[DATA_KEY].training.batch_size,
+                                shuffle=False, drop_last=False)
 
         if mode == 'train_adapters':
+            print(f'Training for PCA with {n_dims} dims')
+            for i, batch in enumerate(tqdm(dataloader)):
+                input_ = batch['input'].to(device)
+                if input_.size(0) < n_dims:
+                    print(f'Skipped because batch size smaller than n_components')
+                    continue
+                unet_adapted(input_)
+
             for adapter in unet_adapted.adapters:
                 name = adapter.swivel.replace('.', '_')
-                if AUGMENT: name += '_aug'
                 with open(f'/workspace/src/out/pca/{cfg.wandb.project}_{name}_{n_dims}dim.pkl',  'wb') as f:
                     pickle.dump(adapter.pca, f)
 
         elif mode == 'get_activations':
+            print(f'Getting activations for adapter with {n_dims}')
+            for i, batch in enumerate(tqdm(dataloader)):
+                input_ = batch['input'].to(device)
+                unet_adapted(input_)
+
             for adapter in unet_adapted.adapters:
                 adapter._save_activations_np()
-
-finally:
-    if LOG:
-        wandb.finish()
