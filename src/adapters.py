@@ -279,7 +279,8 @@ class PoolingMahalanobisWrapper(nn.Module):
 class PCA_Adapter(nn.Module):
     def __init__(self, swivel, n_dims, batch_size, pre_fit=False,
                  train_gaussian=False, compute_dist=False,
-                 reduce_dims=True, name='', device='cuda:0'):
+                 reduce_dims=True, name='', device='cuda:0',
+                 debug=False):
         super().__init__()
         self.swivel = swivel
         self.n_dims = n_dims
@@ -289,6 +290,7 @@ class PCA_Adapter(nn.Module):
         self.reduce_dims = reduce_dims
         self.train_gaussian = train_gaussian
         self.compute_dist = compute_dist
+        self.debug = debug
         self.project = name
         self.pca_path = f'/workspace/src/out/pca/{name}'
         self._init()
@@ -302,14 +304,14 @@ class PCA_Adapter(nn.Module):
 
         if self.pre_fit is False:
             self.pca = IncrementalPCA(n_components=self.n_dims, batch_size=self.bs)
-            print('Instantiated new IPCA')
+            if self.debug: print('Instantiated new IPCA')
         elif self.pre_fit is True:
             self.pca_path += f'_{self.swivel.replace(".", "_")}'
             self.pca_path += f'_{self.n_dims}dim.pkl'
             try:
                 with open(self.pca_path, 'rb') as f:
                     self.pca = pickle.load(f)
-                print(f'Loaded IPCA from path{self.pca_path}')
+                if self.debug: print(f'Loaded IPCA from path{self.pca_path}')
             except Exception as e:
                 print(f'Unable to load IPCA, error: {e}')
             if self.train_gaussian is False:
@@ -319,7 +321,7 @@ class PCA_Adapter(nn.Module):
         try:
             path = f'/workspace/src/out/activations/{self.project}_{self.swivel.replace(".", "_")}_activations_{self.n_dims}dims.npy'
             self.activations = np.load(path)
-            print(f'Loaded activations from path {path}')
+            if self.debug: print(f'Loaded activations from path {path}')
             self._set_gaussian()
         except Exception as e:
             print(f'No previously saved activations found {e}')
@@ -337,13 +339,13 @@ class PCA_Adapter(nn.Module):
 
     def _clean_activations(self):
         self.activations = []
-        print('Emptied collected activations of adapter')
+        if self.debug: print('Emptied collected activations of adapter')
 
     def _set_gaussian(self):
         if isinstance(self.activations, list): self.activations = np.vstack(self.activations)
         self.mu = torch.tensor(np.mean(self.activations, axis=0)).unsqueeze(0).to(self.device)
         self.inv_cov = torch.tensor(np.linalg.inv(np.cov(self.activations, rowvar=False))).to(self.device)
-        print('Mean and inverse covariance matrix computed and set')
+        if self.debug: print('Mean and inverse covariance matrix computed and set')
         self._clean_activations()
 
     def _save_activations_np(self):
