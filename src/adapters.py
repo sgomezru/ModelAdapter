@@ -341,6 +341,10 @@ class PCA_Adapter(nn.Module):
         self.activations = []
         if self.debug: print('Emptied collected activations of adapter')
 
+    def _clean_distances(self):
+        self.distances = []
+        if self.debug: print('Emptied collected mahalanobis distances of adapter')
+
     def _set_gaussian(self):
         if isinstance(self.activations, list): self.activations = np.vstack(self.activations)
         self.mu = torch.tensor(np.mean(self.activations, axis=0)).unsqueeze(0).to(self.device)
