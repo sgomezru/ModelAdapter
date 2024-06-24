@@ -315,9 +315,9 @@ class PCA_Adapter(nn.Module):
             except Exception as e:
                 print(f'Unable to load IPCA, error: {e}')
             if self.train_gaussian is False:
-                self._load_act()
+                self._load_activations()
 
-    def _load_act(self):
+    def _load_activations(self):
         try:
             path = f'/workspace/src/out/activations/{self.project}_{self.swivel.replace(".", "_")}_activations_{self.n_dims}dims.npy'
             self.activations = np.load(path)
